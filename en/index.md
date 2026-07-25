@@ -7,6 +7,9 @@ hero:
   tagline: Agent-push telemetry — agents run the probes close to what they measure and push results; the server hands down the target list, aggregates metrics and raises alerts
   actions:
     - theme: brand
+      text: Download Desktop
+      link: /en/desktop
+    - theme: alt
       text: One-command deploy
       link: /en/deploy
     - theme: alt
@@ -17,6 +20,11 @@ hero:
       link: /en/agent-config
 
 features:
+  - icon: 💻
+    title: NetTact Desktop
+    details: Download the all-in-one Windows or macOS edition with the server and agent built in — no command-line deployment required.
+    link: /en/desktop
+    linkText: Download the latest version
   - icon: 🚀
     title: One-command deploy
     details: A single curl command brings up the whole Docker Compose stack — plus upgrades, backup and restore, uninstall, HTTPS, remote agents, host monitoring and troubleshooting.

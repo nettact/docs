@@ -29,10 +29,11 @@ export default defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      description: 'NetTact 用户文档 —— 家庭与中小企业网络监控:一键部署、Server 配置、Agent 配置',
+      description: 'NetTact 用户文档 —— Desktop 下载、家庭与中小企业网络监控、一键部署、Server 与 Agent 配置',
 
       themeConfig: {
         nav: [
+          { text: 'Desktop', link: '/zh/desktop' },
           { text: '部署', link: '/zh/deploy' },
           { text: 'Server 配置', link: '/zh/server-config' },
           { text: 'Agent 配置', link: '/zh/agent-config' },
@@ -43,6 +44,7 @@ export default defineConfig({
           {
             text: '指南',
             items: [
+              { text: 'Desktop 下载与使用', link: '/zh/desktop' },
               { text: '一键部署', link: '/zh/deploy' },
               { text: 'Server 配置(nettact-lite)', link: '/zh/server-config' },
               { text: 'Agent 配置(nettact-agent)', link: '/zh/agent-config' }
@@ -82,10 +84,11 @@ export default defineConfig({
       label: 'English',
       lang: 'en-US',
       link: '/en/',
-      description: 'NetTact user documentation — network monitoring for homes and small businesses: one-command deploy, server configuration, agent configuration',
+      description: 'NetTact user documentation — Desktop downloads, network monitoring for homes and small businesses, deployment, server and agent configuration',
 
       themeConfig: {
         nav: [
+          { text: 'Desktop', link: '/en/desktop' },
           { text: 'Deploy', link: '/en/deploy' },
           { text: 'Server config', link: '/en/server-config' },
           { text: 'Agent config', link: '/en/agent-config' },
@@ -96,6 +99,7 @@ export default defineConfig({
           {
             text: 'Guide',
             items: [
+              { text: 'Desktop download and usage', link: '/en/desktop' },
               { text: 'One-command deploy', link: '/en/deploy' },
               { text: 'Server configuration (nettact-lite)', link: '/en/server-config' },
               { text: 'Agent configuration (nettact-agent)', link: '/en/agent-config' }

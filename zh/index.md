@@ -7,6 +7,9 @@ hero:
   tagline: Agent 推送式遥测 —— Agent 就近执行探测并上报,Server 下发目标清单、汇聚指标与告警
   actions:
     - theme: brand
+      text: 下载 Desktop
+      link: /zh/desktop
+    - theme: alt
       text: 一键部署
       link: /zh/deploy
     - theme: alt
@@ -17,6 +20,11 @@ hero:
       link: /zh/agent-config
 
 features:
+  - icon: 💻
+    title: NetTact Desktop
+    details: 下载 Windows 或 macOS 一体化桌面版本;内置 Server 与 Agent,无需命令行部署,打开即可开始本机网络监控。
+    link: /zh/desktop
+    linkText: 下载最新版
   - icon: 🚀
     title: 一键部署
     details: curl 一条命令拉起 Docker Compose 全套;含升级、备份与恢复、卸载、HTTPS、远程 Agent、宿主机监控与排障。

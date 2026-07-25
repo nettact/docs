@@ -29,6 +29,7 @@ counterpart switches to a 404. **Add and rename pages on both sides together.**
 | 中文 / Chinese | English | 内容 / Contents |
 |---|---|---|
 | [zh/index.md](./zh/index.md) | [en/index.md](./en/index.md) | 首页,VitePress home layout(hero + features) |
+| [zh/desktop.md](./zh/desktop.md) | [en/desktop.md](./en/desktop.md) | Desktop 产品说明、Windows/macOS 最新版下载、SHA-256 校验、首次运行、运行方式与数据目录 |
 | [zh/deploy.md](./zh/deploy.md) | [en/deploy.md](./en/deploy.md) | Docker Compose 快速开始、状态查看、升级、备份与恢复、卸载、HTTPS、远程 Agent、宿主机监控、故障排查 |
 | [zh/server-config.md](./zh/server-config.md) | [en/server-config.md](./en/server-config.md) | `nettact-lite` 全部 flag 参考、`.env` 对照、监听地址、管理员凭据与改密、数据保留、TLS、会话 Cookie、前端下载 |
 | [zh/agent-config.md](./zh/agent-config.md) | [en/agent-config.md](./en/agent-config.md) | YAML 配置文件与环境变量完整参考、注册流程与令牌时效、权限策略、探测目标访问控制、平台能力差异 |
