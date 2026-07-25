@@ -1,45 +1,20 @@
 ---
-layout: home
-
-hero:
-  name: NetTact
-  text: 家庭与中小企业网络监控
-  tagline: Agent 推送式遥测 —— Agent 就近执行探测并上报,Server 下发目标清单、汇聚指标与告警
-  actions:
-    - theme: brand
-      text: 一键部署
-      link: /deploy
-    - theme: alt
-      text: Server 配置
-      link: /server-config
-    - theme: alt
-      text: Agent 配置
-      link: /agent-config
-
-features:
-  - icon: 🚀
-    title: 一键部署
-    details: curl 一条命令拉起 Docker Compose 全套;含升级、备份与恢复、卸载、HTTPS、远程 Agent、宿主机监控与排障。
-    link: /deploy
-    linkText: 开始部署
-  - icon: 🖥️
-    title: Server 配置
-    details: nettact-lite 全部 flag 参考与 .env 对照、监听地址、管理员凭据与改密、数据保留、TLS、会话 Cookie。
-    link: /server-config
-    linkText: 查看参考
-  - icon: 📡
-    title: Agent 配置
-    details: YAML 配置文件与环境变量完整参考、注册流程与令牌时效、权限策略、探测目标访问控制、平台能力差异。
-    link: /agent-config
-    linkText: 查看参考
-  - icon: 🔒
-    title: 隐私政策
-    details: 中英双语隐私政策,数据采集与对外连接清单,应用商店申报对照。
-    link: /privacy
-    linkText: 阅读全文
+# 两种语言各自住在 /zh/ 与 /en/,根路径只是个落地页:meta refresh 立刻转到中文版
+# (静态托管上无需 JS 即可生效),同时留一组可见链接给不跟随跳转的场景。
+# noindex 是为了不让搜索引擎把这个跳转页当成 / 的正文内容收录。
+layout: false
+title: NetTact
+head:
+  - - meta
+    - http-equiv: refresh
+      content: 0; url=/zh/
+  - - meta
+    - name: robots
+      content: noindex
 ---
 
-::: tip 配置清单的单一事实来源
-配置清单以各二进制的 `--help` 输出为准(`nettact-lite --help` / `nettact-agent --help`)。
-若发现文档与之不一致,以 `--help` 为准并欢迎[提交修正](https://github.com/nettact/docs)。
-:::
+<div style="max-width:32rem;margin:20vh auto;padding:0 1.5rem;text-align:center;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;line-height:1.7">
+  <h1 style="font-size:1.75rem;font-weight:600;margin:0 0 .75rem">NetTact</h1>
+  <p style="margin:0 0 1.5rem;opacity:.7">正在前往中文文档…<br>Redirecting to the documentation…</p>
+  <p style="margin:0"><a href="/zh/">简体中文</a> &nbsp;·&nbsp; <a href="/en/">English</a></p>
+</div>

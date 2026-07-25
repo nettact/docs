@@ -1,0 +1,342 @@
+# NetTact 隐私政策 / Privacy Policy
+
+**生效日期 / Effective date:** 2026-07-25<br>
+**最后更新 / Last updated:** 2026-07-25
+
+本政策适用于通过 Microsoft Store、Mac App Store 或其他官方渠道分发的
+NetTact Desktop，以及 NetTact Lite 和 NetTact Agent（统称“NetTact”）。
+
+This policy applies to NetTact Desktop distributed through the Microsoft Store,
+the Mac App Store, or other official channels, as well as NetTact Lite and
+NetTact Agent (collectively, “NetTact”).
+
+---
+
+## 中文版
+
+### 1. 核心说明
+
+NetTact 是一款**本地优先、自托管**的网络监控与诊断工具。
+
+NetTact 会按照下文说明，在您的设备或您自行管理的服务器上处理网络、设备和监控
+数据。NetTact 项目及商店页面所列的开发者或销售商（以下称“我们”）不运营接收
+这些数据的 NetTact 云服务，也不会从应用中接收您的监控数据、账号信息、遥测、
+使用分析或崩溃报告。
+
+我们不出售个人数据，不使用广告 SDK，也不跨应用或网站跟踪您。
+
+### 2. 适用范围与角色
+
+- **NetTact Desktop：** 服务器、Agent 和数据库在您的设备上运行，默认仅通过
+  回环地址供本机浏览器访问。
+- **自行部署的 NetTact Lite 与 Agent：** Agent 会将数据发送到您指定的
+  NetTact 服务器。该服务器由您或您的组织控制，而非由我们控制。
+- 如果组织使用 NetTact 监控其设备和网络，该组织负责决定处理哪些数据、设置
+  保留期限并向其用户提供必要告知。
+
+本政策不适用于您自行配置的探测目标、通知服务、DNS 或 STUN 服务，也不适用于
+Microsoft、Apple、GitHub 或其他第三方独立提供的服务。
+
+### 3. NetTact 在您的环境中处理的数据
+
+NetTact 根据您使用的功能、操作系统能力和配置，可能处理下列数据：
+
+| 数据类别 | 可能包含的内容 | 用途 |
+|---|---|---|
+| 应用与设备标识 | 随机生成的 Agent ID、站点 ID、设备主机名、操作系统与平台、应用和 Agent 版本 | 识别受监控设备、展示状态、兼容性与故障诊断 |
+| 网络接口与 Wi-Fi 信息 | 接口名称和状态、本机 IP 地址、网关、DNS 服务器、Wi-Fi 连接状态、SSID、频段、信道、信号强度和链路速率 | 展示本机网络状态、分析无线网络质量和定位故障 |
+| 局域网设备信息 | 从操作系统邻居表等系统接口取得的 IP 地址、MAC 地址、可选主机名、厂商信息和最后发现时间 | 发现并展示您网络中的设备 |
+| 主机资源指标 | CPU 与各核心使用率、内存、磁盘、系统负载、运行时间、网络收发速率 | 展示设备健康状况并触发您配置的告警 |
+| 网络探测与诊断结果 | 您配置或应用提供的默认探测目标；ICMP、DNS、HTTP、TCP、网关、NAT/STUN 和 traceroute 的时延、丢包、状态码、解析结果、错误详情、路由跳点、NAT 类型及公网映射地址 | 检测网络和服务可用性、生成历史图表、事件和告警 |
+| 进程与连接快照 | 进程 ID、名称、状态、用户、CPU、内存、运行时间和磁盘 I/O；活动连接的协议、状态、本地与远程地址、端口及关联进程 | 当您在控制台请求实时主机视图时进行诊断；此类快照仅按需生成 |
+| 账号、安全与配置数据 | 本地管理员用户名和密码散列、会话记录与 Cookie、Agent 密钥和凭据、监控目标、告警规则、界面设置、Webhook URL/请求头/模板、SMTP 地址、账号和密码 | 本地身份验证、保存您的设置并执行监控和通知 |
+| 告警、事件与通知内容 | 事件时间、严重程度、目标、指标值、故障详情、受影响的 Agent，以及通知中使用的控制台链接 | 展示、关联和发送您配置的告警 |
+| 本地运行日志 | 启动、运行和错误信息；错误信息可能包含受影响的目标或通知端点 | 排查故障。Desktop 日志在本地滚动保存，不会作为崩溃报告上传给我们 |
+
+NetTact 不进行网络数据包抓取，不读取通信正文来建立用户画像，也不访问您的
+联系人、照片、日历、麦克风、摄像头或精确地理位置。
+
+### 4. 数据如何使用
+
+NetTact 仅为下列目的处理上述数据：
+
+- 提供网络、设备和主机监控功能；
+- 显示实时状态、历史趋势和设备清单；
+- 执行用户请求的诊断；
+- 检测故障、关联事件并发送用户配置的通知；
+- 保护本地控制台和 Agent 连接；
+- 保存用户设置并排查应用运行问题。
+
+我们不会将这些数据用于广告、营销、信用评估、数据经纪或训练通用人工智能
+模型。
+
+### 5. 对外网络连接与第三方
+
+NetTact 不会把数据发送给我们的服务器。应用可能发生的对外连接如下：
+
+| 接收方 | 何时连接 | 发送的内容 |
+|---|---|---|
+| 您配置的探测目标、DNS 解析器和 STUN 服务器 | 执行网络监控或诊断时 | 完成功能所需的 ICMP、DNS、HTTP、TCP、STUN 或 traceroute 流量。接收方通常可以看到您的来源 IP 地址和必要的协议数据 |
+| 您配置的 Webhook 或 SMTP 邮件服务器 | 发送测试或实际告警时 | 您配置的认证信息，以及告警标题、目标、状态、指标、故障详情和控制台链接等通知内容 |
+| 您自行部署的 NetTact 服务器 | 使用独立 Agent 时 | Agent 身份、设备与网络信息、监控指标、事件、清单和按需诊断结果 |
+| GitHub（`api.github.com`） | 您手动选择“检查更新”时 | 一次普通 HTTPS 请求，不包含 NetTact 账号或监控数据库内容；与其他网络请求一样，GitHub 可能取得来源 IP 地址和标准请求元数据。参见 [GitHub 隐私声明](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
+| Microsoft 或 Apple | 获取、安装或更新商店版本时 | 由商店和操作系统独立处理的账号、购买、设备或诊断数据；具体以 [Microsoft 隐私声明](https://privacy.microsoft.com/privacystatement) 和 [Apple 隐私政策](https://www.apple.com/legal/privacy/) 为准 |
+
+您选择的第三方服务可能在其他国家或地区处理数据。请在配置探测目标、Webhook、
+邮件服务器、DNS、STUN 或远程 NetTact 服务器前，查看相应服务的隐私与安全条款。
+
+### 6. 本地权限
+
+NetTact 可能使用下列系统能力：
+
+- **网络与本地网络访问：** 发现局域网设备、读取接口状态并执行探测。macOS 可能
+  显示“本地网络”权限提示。
+- **系统通知：** 显示本机告警。您可以在系统设置中关闭。
+- **开机或登录时启动：** 仅在您启用该选项后配置，并可随时关闭。
+- **系统进程与连接信息：** 仅在您请求相应实时视图时读取；操作系统可能限制
+  某些字段。
+
+不同系统版本显示的权限名称可能不同。
+
+### 7. 存储、保留与删除
+
+#### NetTact Desktop
+
+数据保存在您的设备上：
+
+- Windows：`%LOCALAPPDATA%\NetTact`
+- macOS：`~/Library/Application Support/NetTact`
+
+其中包括本地 SQLite 数据库、Agent 身份与待发送队列，以及滚动日志。
+Desktop 日志最多保留 3 个约 10 MB 的文件。实时进程与连接快照仅保存在服务器
+内存中，不写入历史数据库；后续快照会替换先前快照，应用退出后即消失。
+
+#### 自行部署
+
+数据保存在您指定的 NetTact 服务器和 Agent 设备上。历史指标与事件证据按照服务
+端的数据保留设置清理；账号、配置、设备清单、告警和其他记录会保留到您删除它们
+或删除数据库为止。
+
+#### 删除方法
+
+您可以在控制台中删除监控目标、Agent、通知渠道和其他配置。要彻底删除 Desktop
+的全部数据，请先退出应用，再删除上述 NetTact 应用数据目录。仅卸载应用不一定会
+删除应用数据。自行部署环境的管理员可以删除数据库、日志和 Agent 数据目录。
+
+由于我们没有这些数据的副本，因此无法代您访问、导出、修正、删除或恢复数据。
+
+### 8. 安全
+
+NetTact Desktop 默认将控制台绑定到回环地址；管理员密码使用 bcrypt 散列存储；
+一次性登录令牌短期有效、仅可使用一次且不会写入日志。独立 Agent 可以通过 TLS
+连接到您配置的服务器。
+
+Webhook、SMTP、远程服务器和监听地址的安全性取决于您的配置。通知服务凭据会
+保存在您控制的数据库中，以便发送通知。请保护设备、数据库、备份和管理员凭据，
+远程访问时启用 TLS，并仅使用您信任的服务。
+
+没有任何系统可以保证绝对安全。
+
+### 9. 数据出售、共享与跟踪
+
+我们不出售、出租或向数据经纪商提供个人数据，也不为定向广告共享数据。NetTact
+不包含广告、第三方分析 SDK 或跨应用跟踪技术。
+
+只有在您主动配置并使用外部探测、通知或自托管服务器功能时，相关数据才会按您的
+指示发送给相应接收方，详见第 5 节。
+
+### 10. 儿童隐私
+
+NetTact 是面向家庭网络管理员和组织运维人员的工具，不面向 13 岁以下儿童（或
+当地法律规定的其他最低年龄）。我们不会有意收集儿童的个人数据。
+
+### 11. 政策变更
+
+我们可能因产品功能、商店要求或法律变化而更新本政策。更新时会修改页面顶部的
+“最后更新”日期；重大变更还可能在版本说明或项目公告中说明。
+
+### 12. 联系我们
+
+如对本政策或 NetTact 的数据处理有疑问，请发送邮件至
+**privacy@nettact.org**，或通过 [NetTact GitHub 组织](https://github.com/nettact)
+联系我们。
+
+---
+
+## English Version
+
+### 1. Key points
+
+NetTact is a **local-first, self-hosted** network monitoring and diagnostic
+tool.
+
+As described below, NetTact processes network, device, and monitoring data on
+your device or a server you administer. The NetTact project and the developer
+or seller identified on the applicable store listing (“we,” “us,” or “our”) do
+not operate a NetTact cloud service that receives this data. We do not receive
+your monitoring data, account information, telemetry, usage analytics, or
+crash reports from the app.
+
+We do not sell personal data, use advertising SDKs, or track you across apps or
+websites.
+
+### 2. Scope and roles
+
+- **NetTact Desktop:** the server, Agent, and database run on your device. By
+  default, the console is available to your local browser only through a
+  loopback address.
+- **Self-hosted NetTact Lite and Agent:** the Agent sends data to the NetTact
+  server you specify. That server is controlled by you or your organization,
+  not by us.
+- If an organization uses NetTact to monitor its devices and networks, that
+  organization is responsible for deciding what data is processed, setting
+  retention periods, and providing any notices required for its users.
+
+This policy does not govern probe targets, notification providers, DNS or STUN
+services that you configure, or services independently provided by Microsoft,
+Apple, GitHub, or other third parties.
+
+### 3. Data NetTact processes in your environment
+
+Depending on the features you use, operating-system capabilities, and your
+configuration, NetTact may process:
+
+| Data category | Examples | Purpose |
+|---|---|---|
+| App and device identifiers | Random Agent ID, site ID, device hostname, operating system and platform, app and Agent versions | Identify monitored devices, show status, support compatibility and troubleshooting |
+| Network interface and Wi-Fi information | Interface names and status, local IP addresses, gateway, DNS servers, Wi-Fi connection status, SSID, band, channel, signal strength, and link rates | Show local network status, assess wireless quality, and diagnose faults |
+| LAN device information | IP and MAC addresses, optional hostnames, vendor information, and last-seen times obtained through operating-system facilities such as the neighbor table | Discover and display devices on your network |
+| Host resource metrics | Overall and per-core CPU use, memory, disk, load, uptime, and network transfer rates | Show device health and evaluate alert rules you configure |
+| Network probe and diagnostic results | User-configured or default targets; latency, loss, status codes, resolution results, error details, route hops, NAT type, and public mapped address from ICMP, DNS, HTTP, TCP, gateway, NAT/STUN, and traceroute operations | Measure availability, build history charts, and create events and alerts |
+| Process and connection snapshots | Process IDs, names, status, user, CPU, memory, runtime, and disk I/O; connection protocol and state, local and remote addresses and ports, and associated processes | Diagnose a host when you request a live host view in the console; these snapshots are generated only on demand |
+| Account, security, and configuration data | Local administrator username and password hash, session records and cookies, Agent keys and credentials, monitoring targets, alert rules, UI settings, webhook URLs/headers/templates, and SMTP server, account, and password | Authenticate locally, retain your settings, and perform monitoring and notifications |
+| Alerts, events, and notification content | Time, severity, target, metric value, failure details, affected Agent, and console links used in notifications | Display and correlate incidents and deliver notifications you configure |
+| Local operational logs | Startup, runtime, and error information; an error may identify an affected target or notification endpoint | Troubleshoot the app. Desktop rotates these logs locally and does not upload them to us as crash reports |
+
+NetTact does not perform packet capture, read communication content to profile
+users, or access your contacts, photos, calendar, microphone, camera, or precise
+geolocation.
+
+### 4. How data is used
+
+NetTact processes the data above only to:
+
+- provide network, device, and host monitoring;
+- display current status, historical trends, and device inventory;
+- perform diagnostics requested by the user;
+- detect faults, correlate incidents, and deliver configured notifications;
+- secure the local console and Agent connections; and
+- retain user settings and troubleshoot operation.
+
+We do not use this data for advertising, marketing, credit decisions, data
+brokering, or training general-purpose artificial intelligence models.
+
+### 5. Outbound connections and third parties
+
+NetTact does not send data to our servers. The app may make the following
+outbound connections:
+
+| Recipient | When | Data sent |
+|---|---|---|
+| Probe targets, DNS resolvers, and STUN servers you configure | When performing monitoring or diagnostics | ICMP, DNS, HTTP, TCP, STUN, or traceroute traffic needed for the feature. The recipient can generally see your source IP address and necessary protocol data |
+| Webhook endpoints or SMTP mail servers you configure | When sending a test or actual alert | Authentication data you configure and notification content such as alert title, target, state, metrics, failure details, and console link |
+| A NetTact server you deploy | When using a standalone Agent | Agent identity, device and network information, metrics, events, inventory, and requested diagnostic results |
+| GitHub (`api.github.com`) | When you manually select “Check for updates” | An ordinary HTTPS request that does not contain your NetTact account or monitoring database content. As with other network requests, GitHub may receive your source IP address and standard request metadata. See the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
+| Microsoft or Apple | When obtaining, installing, or updating a store version | Account, transaction, device, or diagnostic data independently handled by the store and operating system, subject to the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement) or [Apple Privacy Policy](https://www.apple.com/legal/privacy/) |
+
+Third-party services you choose may process data in other countries or regions.
+Review the privacy and security terms of any probe target, webhook provider,
+mail server, DNS or STUN service, or remote NetTact server before configuring
+it.
+
+### 6. Local permissions
+
+NetTact may use the following system capabilities:
+
+- **Network and local-network access:** to discover LAN devices, read interface
+  status, and perform probes. macOS may display a Local Network permission
+  prompt.
+- **System notifications:** to display on-device alerts. You can disable them
+  in system settings.
+- **Launch at startup or login:** configured only when you enable the option,
+  and removable at any time.
+- **System process and connection information:** read only when you request the
+  corresponding live view; the operating system may restrict some fields.
+
+Permission names may vary by operating-system version.
+
+### 7. Storage, retention, and deletion
+
+#### NetTact Desktop
+
+Data is stored on your device under:
+
+- Windows: `%LOCALAPPDATA%\NetTact`
+- macOS: `~/Library/Application Support/NetTact`
+
+This includes the local SQLite database, Agent identity and pending-delivery
+queue, and rotating logs. Desktop keeps up to three log files of approximately
+10 MB each. Live process and connection snapshots remain only in server memory,
+are replaced by later snapshots, are not written to the history database, and
+disappear when the app exits.
+
+#### Self-hosted deployments
+
+Data is stored on the NetTact server and Agent devices you specify. Historical
+metrics and incident evidence are pruned according to server retention
+settings. Accounts, configuration, inventory, alerts, and other records remain
+until you delete them or remove the database.
+
+#### How to delete data
+
+You can delete monitoring targets, Agents, notification channels, and other
+configuration through the console. To remove all Desktop data, exit the app
+and delete the NetTact application-data directory listed above. Uninstalling
+the app alone may not remove application data. Administrators of self-hosted
+deployments can delete their database, logs, and Agent data directories.
+
+Because we do not hold a copy of this data, we cannot access, export, correct,
+delete, or restore it on your behalf.
+
+### 8. Security
+
+NetTact Desktop binds the console to a loopback address by default.
+Administrator passwords are hashed with bcrypt. One-time login tokens are
+short-lived, single-use, and not written to logs. Standalone Agents can connect
+to a server you configure using TLS.
+
+The security of webhooks, SMTP, remote servers, and listening addresses depends
+on your configuration. Notification credentials are stored in the database
+you control so NetTact can deliver notifications. Protect your devices,
+database, backups, and administrator credentials; enable TLS for remote access;
+and use only services you trust.
+
+No system can guarantee absolute security.
+
+### 9. Sale, sharing, and tracking
+
+We do not sell or rent personal data, provide it to data brokers, or share it
+for targeted advertising. NetTact contains no advertising, third-party
+analytics SDK, or cross-app tracking technology.
+
+Data is sent to an external probe, notification service, or self-hosted server
+only when you configure and use that functionality, as described in Section 5.
+
+### 10. Children’s privacy
+
+NetTact is a tool for home network administrators and organizational IT
+operators. It is not directed to children under 13 (or another minimum age
+required by local law), and we do not knowingly collect personal data from
+children.
+
+### 11. Changes to this policy
+
+We may update this policy when product features, store requirements, or laws
+change. We will revise the “Last updated” date above and may also describe
+material changes in release notes or project announcements.
+
+### 12. Contact us
+
+For questions about this policy or NetTact’s data handling, email
+**privacy@nettact.org** or contact us through the
+[NetTact GitHub organization](https://github.com/nettact).

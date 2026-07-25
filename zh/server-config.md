@@ -3,7 +3,7 @@
 `nettact-lite` 是自托管的单二进制 Server:HTTP API + 内置 Web 控制台 + SQLite
 存储。它**完全由命令行 flag 配置**(外加两个用于前端下载的可选环境变量,见
 [Web 控制台前端](#web-控制台前端));Docker Compose 部署时,常用项通过 `.env`
-映射为 flag(见 [.env 变量对照](#env-变量对照docker-compose))。
+映射为 flag(见 [.env 变量对照](#env-变量对照-docker-compose))。
 
 本页与 `nettact-lite --help` 逐项对应;若两者不一致,以 `--help` 为准并请报告。
 
@@ -19,10 +19,6 @@
 | `-dev` | `false` | 开发模式:对 Vite 开发源(web-console)开放 CORS,会话 Cookie 不带 Secure。生产勿用。 |
 | `-admin-user` | 空 | 可选;**仅首次运行生效**。省略则首启自动创建 `admin` 账号并生成随机密码(打印一次)。 |
 | `-admin-pass` | 空 | 可选;**仅首次运行生效**。省略则首启自动生成初始密码并打印(仅一次)。 |
-| `-max-agents` | `50` | 可注册的 Agent 数上限;`0` = 不限制。 |
-| `-retain-raw-days` | `2` | 原始采样保留天数。原始数据只服务 ≤2 小时范围的图表(更长范围读聚合),按 1s 探测间隔计,每多留一天原始数据就是 GB 级的 SQLite 空间,故默认以"天"计。 |
-| `-retain-1m-days` | `30` | 1 分钟聚合(rollup)保留天数。 |
-| `-retain-1h-days` | `730` | 1 小时聚合保留天数;**1 天聚合永久保留**(无对应 flag)。 |
 | `-tls-cert` | 空 | TLS 证书路径;与 `-tls-key` 同时提供时原生服务 HTTPS/WSS。 |
 | `-tls-key` | 空 | TLS 私钥路径;必须与 `-tls-cert` 成对出现,只给一个则拒绝启动(避免误退回明文)。 |
 | `-secure-cookie` | `auto` | 会话 Cookie 的 `Secure` 属性:`auto` / `true` / `false`,见[会话 Cookie](#会话-cookie)。 |
@@ -45,16 +41,15 @@ Compose 部署时不直接写 flag,而是在 `.env` 里设变量,由 `docker-com
 | `.env` 变量 | 默认值 | 作用 |
 |---|---|---|
 | `NETTACT_HTTP_PORT` | `12450` | 发布到宿主机的端口(容器内固定监听 `:12450`,此变量只改端口映射的宿主机侧)。 |
-| `NETTACT_MAX_AGENTS` | `50` | 映射为 `-max-agents`。 |
 | `NETTACT_SECURE_COOKIE` | `auto` | 映射为 `-secure-cookie`;前置 TLS 终止反代时设 `true`。 |
 | `NETTACT_LITE_VERSION` | `latest` | Server 镜像 tag(建议钉住 `vX.Y.Z` 便于可复现升级)。 |
 | `NETTACT_AGENT_VERSION` | `latest` | Agent 镜像 tag(与 Server 独立发版)。 |
 | `NETTACT_LITE_IMAGE` | `ghcr.io/nettact/nettact-lite` | 覆盖 Server 镜像地址(如本地构建测试)。 |
 | `NETTACT_AGENT_IMAGE` | `ghcr.io/nettact/nettact-agent` | 覆盖 Agent 镜像地址。 |
 
-数据库路径、保留策略、TLS 等其余 flag 在 `docker-compose.yml` 的 `command:` 里
+数据库路径、TLS 等其余 flag 在 `docker-compose.yml` 的 `command:` 里
 按需直接增删(TLS 的注释行已备好,同时要换 https 版 healthcheck,见
-[部署篇](./deploy.md#7-启用-https可选))。
+[部署篇](./deploy.md#_7-启用-https-可选))。
 
 ---
 
@@ -97,12 +92,12 @@ server-info 会标示当前地址来源)。若保存的地址无法绑定(端口
 
 ## 数据保留
 
-指标存储分四层:原始采样、1 分钟聚合、1 小时聚合、1 天聚合。前三层的保留天数
-分别由 `-retain-raw-days`(默认 2)、`-retain-1m-days`(默认 30)、
-`-retain-1h-days`(默认 730)控制,1 天聚合永久保留。
+指标存储分四层:原始采样、1 分钟聚合、1 小时聚合、1 天聚合。保留窗口固定、不可
+配置:原始采样 2 天、1 分钟聚合 30 天、1 小时聚合 2 年,1 天聚合永久保留。
 
-图表按查询范围自动选层:≤2 小时的范围读原始数据,更长范围读聚合——所以缩短
-raw 保留只影响"最近两小时"级别的细节回看,不影响长期趋势。
+图表按查询范围自动选层:≤2 小时的范围读原始数据,更长范围读聚合——所以原始
+采样只承担"最近两小时"级别的细节回看,长期趋势由聚合层保证。原始采样保留窗口
+短是刻意的:按 1s 探测间隔计,每多留一天原始数据就是 GB 级的 SQLite 空间。
 
 ---
 

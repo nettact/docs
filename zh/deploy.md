@@ -87,7 +87,7 @@ docker compose up -d agent
 默认(`-secure-cookie auto`)下,会话 Cookie 只在 Server 自己跑 TLS 时才带 `Secure`
 标志,所以**纯 HTTP 部署开箱即可登录**。生产环境建议:
 
-- 给 Server 配 TLS(见下方[启用 HTTPS](#7-启用-https可选)),或
+- 给 Server 配 TLS(见下方[启用 HTTPS](#_7-启用-https-可选)),或
 - 前置一个终止 TLS 的反向代理(Caddy/Nginx/Traefik),并在 `.env` 设
   `NETTACT_SECURE_COOKIE=true`(浏览器侧是 https,Cookie 应带 Secure)。
 

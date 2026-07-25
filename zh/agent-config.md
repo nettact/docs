@@ -194,4 +194,4 @@ probe_access:
 - **Docker(官方 Agent 镜像)**:容器以**非 root**运行、不加任何 capability
   (无 `NET_RAW`),支持 DNS/HTTP/TCP/NAT 探针与主机指标(主机指标仍需按上节
   授予 `host.*` 权限);ICMP 类探测在容器内不可用(会从"实际生效"集中裁剪)。默认监控的是**容器自身**的网络视角,监控
-  宿主机需 `network_mode: host`(见[部署篇](./deploy.md#9-让-agent-监控宿主机可选linux))。
+  宿主机需 `network_mode: host`(见[部署篇](./deploy.md#_9-让-agent-监控宿主机-可选-linux))。
