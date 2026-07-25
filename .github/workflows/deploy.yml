@@ -17,6 +17,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # enablement: true 首次运行时自动创建 Pages 站点(Source=GitHub Actions)
+      pages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +39,8 @@ jobs:
 
       - if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
