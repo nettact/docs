@@ -39,17 +39,21 @@ Common options (`bash install.sh --help` lists them all):
 | `--port <n>` | Console port (written to `.env` as `NETTACT_HTTP_PORT`, default 12450) |
 | `--lite-version` / `--agent-version <tag>` | Pin the image versions (default `latest`) |
 | `--server-only` | Deploy the server only |
-| `--agent-only --server-url <url> --token <token>` | **Remote agent mode**: on a second host, bring up only the agent and enroll it against an existing server (see section 8) |
 | `--host-network` | Have the agent monitor the host network (Linux; trade-offs in section 9) |
+| `--auto-update` | Check daily for a new Agent image and restart the Agent automatically. |
 | `-y` / `--yes` | Non-interactive (on a non-first run where the password cannot be retrieved automatically, it prints the manual fallback command instead) |
 
 The script is **idempotent**: re-running it leaves an existing `.env`, secret and
 data volumes untouched, so it is safe to re-run after a partial failure. Every
-step that fails prints the reason plus the manual fallback command for it. If
-you already have this repository checked out, run `./deploy/install.sh`
-directly — it uses the local `docker-compose.yml` / `.env.example` (set
-`NETTACT_DIST_BASE_URL` to point at an internal mirror if you need to override
-the download location).
+step that fails prints the reason plus the manual fallback command for it.
+
+The source is owned by the `server-lite` repository at
+[`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh).
+From the NetTact superproject root, run
+run `./deploy/install.sh`. The script uses local `docker-compose.yml` and
+`.env.example` files when they exist in the current directory, otherwise it
+downloads them from `https://d.nettact.org`. Set `NETTACT_DIST_BASE_URL` to
+use an internal mirror.
 
 The sections below are the **manual version** of that same flow, and also the
 reference for understanding each step and for troubleshooting.
@@ -223,12 +227,23 @@ office), run a separate agent on that machine pointing at the server's
 2. you have issued a fresh one-time enrollment token for it on the console's
    "Agent" page (one token per agent).
 
-**One-command script (Linux)**:
+**Merged one-command Agent installer (Linux / macOS / Docker)**:
+
+Native Linux or macOS:
 
 ```bash
-curl -fsSL https://d.nettact.org/install.sh | bash -s -- --agent-only \
+curl -fsSL https://d.nettact.org/agent/install.sh | sudo bash -s -- \
   --server-url http://<server host>:12450 --token '<one-time token>'
 ```
+
+Docker:
+
+```bash
+curl -fsSL https://d.nettact.org/agent/install.sh | bash -s -- --docker \
+  --server-url http://<server host>:12450 --token '<one-time token>'
+```
+
+Append `--auto-update` to either command to enable daily Agent updates.
 
 **Docker (Linux, manual)**:
 

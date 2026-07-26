@@ -35,14 +35,18 @@ bash install.sh
 | `--port <n>` | 控制台端口(写入 `.env` 的 `NETTACT_HTTP_PORT`,默认 12450) |
 | `--lite-version` / `--agent-version <tag>` | 钉住镜像版本(默认 `latest`) |
 | `--server-only` | 只部署 Server |
-| `--agent-only --server-url <url> --token <令牌>` | **远程 Agent 模式**:在第二台主机上只拉起 Agent 并注册到已有 Server(见第 8 节) |
 | `--host-network` | Agent 监控宿主机网络(Linux;取舍见第 9 节) |
+| `--auto-update` | 每天检查新的 Agent 镜像，更新后自动重启 Agent。 |
 | `-y` / `--yes` | 无交互(非首启且无法自动取得密码时直接给出手工兜底命令) |
 
 脚本**幂等**:重复执行不动已有的 `.env`、secret 与数据卷;部分失败后重跑安全;
-每步失败都会打印原因与对应的手工兜底命令。已在本仓库 checkout 里时直接
-`./deploy/install.sh`,使用本地的 `docker-compose.yml` / `.env.example`
-(内网镜像源可设 `NETTACT_DIST_BASE_URL` 覆盖下载地址)。
+每步失败都会打印原因与对应的手工兜底命令。
+
+脚本源码归属 `server-lite` 仓库，路径为
+[`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh)。
+`server-lite` 仓库时运行 `./deploy/install.sh`。当前目录存在
+`docker-compose.yml` 与 `.env.example` 时优先使用本地文件，否则从
+`https://d.nettact.org` 下载。内网镜像源可通过 `NETTACT_DIST_BASE_URL` 覆盖。
 
 以下各节是同一流程的**手工版**,也是理解各步骤与排障的参考。
 
@@ -195,12 +199,23 @@ compose 里的 agent 只监控 Server 所在这台机器。要监控别的机器
 1. 那台机器能访问 Server(`http(s)://<server 主机>:<NETTACT_HTTP_PORT>`);
 2. 在控制台「Agent」页为它新签发一枚一次性注册令牌(每台 Agent 一枚)。
 
-**一键脚本(Linux)**:
+**合并的一键 Agent 安装脚本(Linux / macOS / Docker)**:
+
+原生 Linux 或 macOS:
 
 ```bash
-curl -fsSL https://d.nettact.org/install.sh | bash -s -- --agent-only \
+curl -fsSL https://d.nettact.org/agent/install.sh | sudo bash -s -- \
   --server-url http://<server 主机>:12450 --token '<一次性令牌>'
 ```
+
+Docker:
+
+```bash
+curl -fsSL https://d.nettact.org/agent/install.sh | bash -s -- --docker \
+  --server-url http://<server 主机>:12450 --token '<一次性令牌>'
+```
+
+在任一命令末尾追加 `--auto-update`，即可启用 Agent 每日自动更新。
 
 **Docker(Linux,手工)**:
 
