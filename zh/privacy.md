@@ -1,7 +1,7 @@
 # NetTact 隐私政策
 
 **生效日期：** 2026-07-25<br>
-**最后更新：** 2026-07-25
+**最后更新：** 2026-07-26
 
 本政策适用于通过 Microsoft Store、Mac App Store 或其他官方渠道分发的 NetTact Desktop，以及 NetTact Lite 和 NetTact Agent（统称“NetTact”）。
 
@@ -70,7 +70,7 @@ NetTact 不会把数据发送给我们的服务器。应用可能发生的对外
 | 您配置的探测目标、DNS 解析器和 STUN 服务器 | 执行网络监控或诊断时 | 完成功能所需的 ICMP、DNS、HTTP、TCP、STUN 或 traceroute 流量。接收方通常可以看到您的来源 IP 地址和必要的协议数据 |
 | 您配置的 Webhook 或 SMTP 邮件服务器 | 发送测试或实际告警时 | 您配置的认证信息，以及告警标题、目标、状态、指标、故障详情和控制台链接等通知内容 |
 | 您自行部署的 NetTact 服务器 | 使用独立 Agent 时 | Agent 身份、设备与网络信息、监控指标、事件、清单和按需诊断结果 |
-| GitHub（`api.github.com`） | 您手动选择“检查更新”时 | 一次普通 HTTPS 请求，不包含 NetTact 账号或监控数据库内容；与其他网络请求一样，GitHub 可能取得来源 IP 地址和标准请求元数据。参见 [GitHub 隐私声明](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
+| GitHub（`api.github.com`） | 您在非商店版本中手动选择“检查更新”时。Microsoft Store 版本的更新由商店安装，不会为此连接 GitHub | 一次普通 HTTPS 请求，不包含 NetTact 账号或监控数据库内容；与其他网络请求一样，GitHub 可能取得来源 IP 地址和标准请求元数据。参见 [GitHub 隐私声明](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
 | Microsoft 或 Apple | 获取、安装或更新商店版本时 | 由商店和操作系统独立处理的账号、购买、设备或诊断数据；具体以 [Microsoft 隐私声明](https://privacy.microsoft.com/privacystatement) 和 [Apple 隐私政策](https://www.apple.com/legal/privacy/) 为准 |
 
 您选择的第三方服务可能在其他国家或地区处理数据。请在配置探测目标、Webhook、
@@ -83,7 +83,9 @@ NetTact 可能使用下列系统能力：
 - **网络与本地网络访问：** 发现局域网设备、读取接口状态并执行探测。macOS 可能
   显示“本地网络”权限提示。
 - **系统通知：** 显示本机告警。您可以在系统设置中关闭。
-- **开机或登录时启动：** 仅在您启用该选项后配置，并可随时关闭。
+- **开机或登录时启动：** 仅在您启用该选项后配置，并可随时关闭。Microsoft Store
+  版本使用系统的启动任务机制，因此该项也会出现在 Windows 的启动应用设置中，
+  可在系统设置内关闭。
 - **系统进程与连接信息：** 仅在您请求相应实时视图时读取；操作系统可能限制
   某些字段。
 

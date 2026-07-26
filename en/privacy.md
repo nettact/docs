@@ -1,7 +1,7 @@
 # NetTact Privacy Policy
 
 **Effective date:** 2026-07-25<br>
-**Last updated:** 2026-07-25
+**Last updated:** 2026-07-26
 
 This policy applies to NetTact Desktop distributed through the Microsoft Store, the Mac App Store, or other official channels, as well as NetTact Lite and NetTact Agent (collectively, “NetTact”).
 
@@ -81,7 +81,7 @@ outbound connections:
 | Probe targets, DNS resolvers, and STUN servers you configure | When performing monitoring or diagnostics | ICMP, DNS, HTTP, TCP, STUN, or traceroute traffic needed for the feature. The recipient can generally see your source IP address and necessary protocol data |
 | Webhook endpoints or SMTP mail servers you configure | When sending a test or actual alert | Authentication data you configure and notification content such as alert title, target, state, metrics, failure details, and console link |
 | A NetTact server you deploy | When using a standalone Agent | Agent identity, device and network information, metrics, events, inventory, and requested diagnostic results |
-| GitHub (`api.github.com`) | When you manually select “Check for updates” | An ordinary HTTPS request that does not contain your NetTact account or monitoring database content. As with other network requests, GitHub may receive your source IP address and standard request metadata. See the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
+| GitHub (`api.github.com`) | When you manually select “Check for updates” in a non-store build. A Microsoft Store build is updated by the Store and does not contact GitHub for this | An ordinary HTTPS request that does not contain your NetTact account or monitoring database content. As with other network requests, GitHub may receive your source IP address and standard request metadata. See the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
 | Microsoft or Apple | When obtaining, installing, or updating a store version | Account, transaction, device, or diagnostic data independently handled by the store and operating system, subject to the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement) or [Apple Privacy Policy](https://www.apple.com/legal/privacy/) |
 
 Third-party services you choose may process data in other countries or regions.
@@ -99,7 +99,9 @@ NetTact may use the following system capabilities:
 - **System notifications:** to display on-device alerts. You can disable them
   in system settings.
 - **Launch at startup or login:** configured only when you enable the option,
-  and removable at any time.
+  and removable at any time. A Microsoft Store build uses the system startup-task
+  mechanism, so the entry also appears in the Windows startup-apps settings and
+  can be turned off there.
 - **System process and connection information:** read only when you request the
   corresponding live view; the operating system may restrict some fields.
 
