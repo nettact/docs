@@ -161,7 +161,7 @@ Desktop 版内嵌的 Agent 固定为完全授权(desktop full access),不需要�
 | 权限族 | Windows | Linux | macOS | Docker |
 |---|---|---|---|---|
 | DNS / HTTP / TCP / NAT 探测 | ✅ | ✅ | ✅ | ✅ |
-| ICMP 探测、网关探测 | ✅ | 🔑 | ❌ | 🔑 |
+| ICMP 探测、网关探测 | ✅ | ✅ | ❌ | ✅ |
 | 网卡状态 / 地址、Wi-Fi | ✅ | ✅ | ✅ | ✅ |
 | 邻居(设备发现) | ✅ | ✅ | ❌ | ✅ |
 | 主机指标 `host.*` | ✅ | ✅ | ✅ | ✅ |
@@ -171,17 +171,29 @@ Desktop 版内嵌的 Agent 固定为完全授权(desktop full access),不需要�
 
 关于 🔑:
 
+**为什么 ICMP 探测不需要提权**:发一个 echo 再读回复,用**无特权 ping socket**
+(`SOCK_DGRAM`/`IPPROTO_ICMP`)就够了,只要内核的 `net.ipv4.ping_group_range` 覆盖
+当前 gid——这是常见发行版与 Docker 容器的默认值(`0 2147483647`)。Agent 启动时先试
+raw、失败自动回落到 ping socket。实测:宿主机普通用户、以及**不加任何 capability 的
+非 root 容器**,ICMP 探测与网关探测都可用。
+
+**路径诊断才是真的要 raw socket**:它必须收到中间路由器回的 Time-Exceeded,
+无特权 ping socket 收不到这类报文,只能走 raw(`CAP_NET_RAW` 或 root)。
+
+按平台:
+
 - **Windows**:只有 TCP 路径诊断需要管理员。一键脚本注册的计划任务以 SYSTEM 运行,
   已满足;手工双击运行则需要"以管理员身份运行"。ICMP 走系统 `IcmpSendEcho`,不需要提权。
-- **Linux**:ICMP 相关能力需要 `CAP_NET_RAW`(root 自带)。一键脚本装出来的 systemd
-  服务以 root 运行,默认就是全能力。非 root 运行时,若内核的
-  `net.ipv4.ping_group_range` 覆盖了当前 gid,ICMP **探测**仍可用,但**路径诊断不可用**
-  ——它需要收中间跳的 Time-Exceeded,无特权 ping socket 收不到。
+- **Linux**:ICMP 探测与网关探测开箱可用(见上)。两种路径诊断需 `CAP_NET_RAW` 或
+  root;一键脚本装出来的 systemd 服务以 root 运行,默认就是全能力。若把
+  `net.ipv4.ping_group_range` 关掉(`1 0`)且又没有 `CAP_NET_RAW`,则连 ICMP 探测
+  也会掉——控制台会如实显示为不可用。
 - **Docker**:官方镜像**不带**文件 capability(带了会让 `--cap-drop ALL` 的容器
   直接启动失败,而且 Docker 默认 bounding set 本来就含 NET_RAW,等于给每个容器
-  都偷偷开了 raw socket)。ICMP 相关能力靠**以 root 运行容器**获得:一键脚本的
-  `--docker` 宿主机视角默认加 `--user 0:0 --cap-add NET_RAW`。不加时 Agent 照常
-  运行,只是如实报告这些能力不可用。
+  都偷偷开了 raw socket)。所以非 root 容器即使 `--cap-add NET_RAW` 也只拿得到
+  ping socket——**这个 flag 单独加没有意义**。一键脚本的 `--docker` 宿主机视角用
+  `--user 0:0 --cap-add NET_RAW` 拿到 raw,**这一步只为路径诊断**;不加时 ICMP
+  探测与网关探测照常可用,只有路径诊断报不可用。
 - **macOS**:❌ 的几项在 macOS 构建里尚未实现,授权和提权都无法启用。
 
 ### Docker 的另一件事:采的是谁
@@ -201,7 +213,11 @@ Desktop 版内嵌的 Agent 固定为完全授权(desktop full access),不需要�
 
 #### probe.icmp {#probe-icmp}
 
-用 ICMP(ping)探测目标的可达性与延迟。Windows ✅ / Linux 🔑 / macOS ❌。
+用 ICMP(ping)探测目标的可达性与延迟。Windows ✅ / Linux ✅ / macOS ❌。
+
+Linux 上**不需要提权**:走无特权 ping socket 即可,前提是
+`net.ipv4.ping_group_range` 覆盖当前 gid(常见默认)。该 sysctl 被关闭且无
+`CAP_NET_RAW` 时才不可用。
 
 #### probe.dns {#probe-dns}
 
@@ -237,7 +253,7 @@ Desktop 版内嵌的 Agent 固定为完全授权(desktop full access),不需要�
 #### network.gateway.probe {#network-gateway-probe}
 
 发现默认网关并对其做 ICMP 探测,用于区分"本地网络断了"和"上游断了"。
-可用性与 [probe.icmp](#probe-icmp) 一致:Windows ✅ / Linux 🔑 / macOS ❌。
+可用性与 [probe.icmp](#probe-icmp) 完全一致:Windows ✅ / Linux ✅(无需提权)/ macOS ❌。
 
 #### network.interface.status.read {#network-interface-status-read}
 
@@ -408,9 +424,14 @@ Windows 🔑(需管理员或以 SYSTEM 运行的服务)/ Linux 🔑(需 `CAP_NET
 和上一条不同:父权限**写了**,但当前平台不支持它,于是子权限被静默裁掉。控制台
 Agent 详情页会把它列在"受阻",并指出是哪个父权限没生效。
 
-**Linux 上 ICMP 相关的都不生效。**
-Agent 没跑在有 `CAP_NET_RAW` 的进程里。一键脚本装的 systemd 服务以 root 运行,默认
-就有;手工以普通用户运行则没有。容器要 `--cap-add NET_RAW`。
+**Linux 上路径诊断不生效,但 ICMP 探测正常。**
+这是预期的:路径诊断要收中间跳的 Time-Exceeded,必须 raw socket(`CAP_NET_RAW`
+或 root),而 ICMP 探测用无特权 ping socket 就够。一键脚本装的 systemd 服务以
+root 运行,两者都有;容器需以 root 运行(`--user 0:0 --cap-add NET_RAW`)。
+
+**Linux 上连 ICMP 探测也不生效。**
+说明 `net.ipv4.ping_group_range` 被关掉了(值为 `1 0`)且进程没有 `CAP_NET_RAW`。
+放开该 sysctl,或让 Agent 以 root / 带 `CAP_NET_RAW` 运行。
 
 **容器里采到的是容器自己的数据。**
 用 `--container-view` 装的,或是手工 `docker run` 没加宿主机视角那几项。见上文

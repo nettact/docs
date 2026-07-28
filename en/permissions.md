@@ -180,7 +180,7 @@ is nothing to configure — it monitors your own computer.
 | Permission family | Windows | Linux | macOS | Docker |
 |---|---|---|---|---|
 | DNS / HTTP / TCP / NAT probes | ✅ | ✅ | ✅ | ✅ |
-| ICMP probe, gateway probe | ✅ | 🔑 | ❌ | 🔑 |
+| ICMP probe, gateway probe | ✅ | ✅ | ❌ | ✅ |
 | Interface status / addresses, Wi-Fi | ✅ | ✅ | ✅ | ✅ |
 | Neighbors (device discovery) | ✅ | ✅ | ❌ | ✅ |
 | Host metrics `host.*` | ✅ | ✅ | ✅ | ✅ |
@@ -190,22 +190,37 @@ is nothing to configure — it monitors your own computer.
 
 About 🔑:
 
+**Why ICMP probing needs no privilege**: sending an echo and reading the reply is
+all an **unprivileged ping socket** (`SOCK_DGRAM`/`IPPROTO_ICMP`) has to do, and
+the kernel allows it whenever `net.ipv4.ping_group_range` covers the process's
+gid — the default on common distributions and inside Docker containers
+(`0 2147483647`). The Agent tries a raw socket first and falls back to a ping
+socket automatically. Measured: an ordinary user on the host, and a plain non-root
+container with no added capabilities, both get ICMP probing and gateway probing.
+
+**Path diagnostics is what genuinely needs a raw socket**: it must receive the
+Time-Exceeded replies intermediate routers send back, which an unprivileged ping
+socket never sees, so it takes `CAP_NET_RAW` or root.
+
+By platform:
+
 - **Windows**: only TCP path diagnostics needs Administrator. The scheduled task
   the installer registers runs as SYSTEM, which satisfies it; a hand-launched
   binary needs "Run as administrator". ICMP goes through the system
   `IcmpSendEcho` and needs no elevation.
-- **Linux**: the ICMP capabilities need `CAP_NET_RAW` (root has it). The systemd
-  service the installer writes runs as root, so a default install has everything.
-  Run unprivileged, ICMP **probing** still works if the kernel's
-  `net.ipv4.ping_group_range` covers the process's gid — but **path diagnostics
-  does not**, because it must receive intermediate Time-Exceeded replies, which
-  an unprivileged ping socket never sees.
+- **Linux**: ICMP probing and gateway probing work out of the box (above). Both
+  traceroute modes need `CAP_NET_RAW` or root; the systemd service the installer
+  writes runs as root, so a default install has everything. Switching
+  `net.ipv4.ping_group_range` off (`1 0`) without `CAP_NET_RAW` takes ICMP probing
+  away too — the console then reports it as unavailable.
 - **Docker**: the official image carries **no** file capability — one would make
   a `--cap-drop ALL` container fail to start outright, and since Docker's default
   bounding set already contains NET_RAW it would quietly hand raw sockets to every
-  container. The ICMP capabilities come from **running the container as root**
-  instead: the installer's `--docker` host view adds `--user 0:0 --cap-add
-  NET_RAW`. Without that the Agent still runs and reports those capabilities as
+  container. A non-root container therefore only ever gets a ping socket, even
+  with `--cap-add NET_RAW`, so **that flag alone achieves nothing**. The
+  installer's `--docker` host view reaches a raw socket with `--user 0:0
+  --cap-add NET_RAW`, and **that is only for path diagnostics**: without it, ICMP
+  probing and gateway probing still work and only path diagnostics is reported
   unsupported.
 - **macOS**: the ❌ rows are not implemented in the macOS build yet; neither
   granting nor elevating enables them.
@@ -229,7 +244,12 @@ Purpose, dependencies and platform availability for each one.
 
 #### probe.icmp {#probe-icmp}
 
-Probe target reachability and latency with ICMP (ping). Windows ✅ / Linux 🔑 / macOS ❌.
+Probe target reachability and latency with ICMP (ping). Windows ✅ / Linux ✅ / macOS ❌.
+
+**No privilege is required on Linux**: an unprivileged ping socket suffices, as
+long as `net.ipv4.ping_group_range` covers the process's gid (the common default).
+It becomes unavailable only when that sysctl is switched off and the process has
+no `CAP_NET_RAW`.
 
 #### probe.dns {#probe-dns}
 
@@ -270,7 +290,7 @@ Discover this host's NAT behaviour and public mapping via STUN. All platforms.
 
 Discover the default gateway and probe it with ICMP, which is what separates "the
 local network is down" from "the upstream is down". Availability tracks
-[probe.icmp](#probe-icmp): Windows ✅ / Linux 🔑 / macOS ❌.
+[probe.icmp](#probe-icmp) exactly: Windows ✅ / Linux ✅ (no privilege) / macOS ❌.
 
 #### network.interface.status.read {#network-interface-status-read}
 
@@ -464,10 +484,16 @@ Different case: the parent IS listed, but this platform does not support it, so
 the child was dropped silently. The console's Agent detail page lists it under
 "blocked" and names the parent that is not in effect.
 
-**Nothing ICMP-related works on Linux.**
-The Agent is not running with `CAP_NET_RAW`. The systemd service the installer
-writes runs as root and has it; a hand-started unprivileged process does not. In
-a container, add `--cap-add NET_RAW`.
+**Path diagnostics does not work on Linux, but ICMP probing does.**
+Expected: path diagnostics must receive intermediate Time-Exceeded replies, which
+takes a raw socket (`CAP_NET_RAW` or root), while ICMP probing gets by with an
+unprivileged ping socket. The systemd service the installer writes runs as root
+and has both; a container needs to run as root (`--user 0:0 --cap-add NET_RAW`).
+
+**Not even ICMP probing works on Linux.**
+`net.ipv4.ping_group_range` has been switched off (set to `1 0`) and the process
+has no `CAP_NET_RAW`. Open that sysctl up, or run the Agent as root / with
+`CAP_NET_RAW`.
 
 **The container reports its own data instead of the host's.**
 It was installed with `--container-view`, or started by hand without the host-view
