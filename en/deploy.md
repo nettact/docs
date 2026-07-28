@@ -245,6 +245,41 @@ curl -fsSL https://d.nettact.org/agent/install.sh | bash -s -- --docker \
 
 Append `--auto-update` to either command to enable daily Agent updates.
 
+**Choose permissions while you are at it** (optional): add `--permissions` to fix
+what this Agent may collect up front, instead of editing a config file and
+restarting after the fact. The console's "Agent" page generates the whole command
+for the preset you pick.
+
+```bash
+curl -fsSL https://d.nettact.org/agent/install.sh | sudo bash -s -- \
+  --server-url http://<server host>:12450 --token '<one-time token>' \
+  --permissions 'probe.icmp,probe.dns,probe.http,probe.tcp,host.cpu.read,host.memory.read'
+```
+
+Without the argument the Agent uses its built-in default set. Note that a list
+**replaces** that set rather than adding to it — see the
+[permission reference](./permissions.md) for the full list and per-platform
+availability.
+
+**The one-command Docker install monitors the host by default**: on a Linux
+Docker host, `--docker` starts the container with `--network host --pid host
+--cap-add NET_RAW --user 0:0` and bind-mounts the host's `/proc` and `/sys`
+read-only, so what you see is the machine rather than the container. To monitor
+the container itself, add `--container-view`.
+
+Three caveats:
+
+- This applies to the **one-command installer** only. The manual `docker run`
+  below and the agent service in the compose file still default to the container's
+  own view; add the same settings yourself (the compose file carries the full
+  block, commented out).
+- "Host" means the machine running the **Docker daemon**. Under Docker Desktop
+  that is its Linux VM, not your Windows or macOS system — a Linux container has
+  no way to observe the outer OS.
+- **Disk metrics are the exception** and still describe the container's
+  filesystem even in host view; see the
+  [permission reference](./permissions.md#host-disk-read).
+
 **Docker (Linux, manual)**:
 
 ```bash

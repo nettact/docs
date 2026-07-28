@@ -33,6 +33,7 @@ counterpart switches to a 404. **Add and rename pages on both sides together.**
 | [zh/deploy.md](./zh/deploy.md) | [en/deploy.md](./en/deploy.md) | Docker Compose 快速开始、状态查看、升级、备份与恢复、卸载、HTTPS、远程 Agent、宿主机监控、故障排查 |
 | [zh/server-config.md](./zh/server-config.md) | [en/server-config.md](./en/server-config.md) | `nettact-lite` 全部 flag 参考、`.env` 对照、监听地址、管理员凭据与改密、数据保留、TLS、会话 Cookie、前端下载 |
 | [zh/agent-config.md](./zh/agent-config.md) | [en/agent-config.md](./en/agent-config.md) | YAML 配置文件与环境变量完整参考、注册流程与令牌时效、权限策略、探测目标访问控制、平台能力差异 |
+| [zh/permissions.md](./zh/permissions.md) | [en/permissions.md](./en/permissions.md) | 权限参考:三层视图、整体替换语义、预设档位、四种设置方式、平台支持总表、逐条权限说明(每条带显式锚点,控制台按 `#<权限 ID 点换连字符>` 深链过来——改动锚点会让控制台的「查看文档」失效)、常见问题 |
 | [zh/privacy.md](./zh/privacy.md) | [en/privacy.md](./en/privacy.md) | Microsoft Store / Mac App Store 上架用隐私政策；中文与英文分别维护，修改内容时必须同步更新两份 |
 
 > 配置清单的单一事实来源是各二进制的 `--help` 输出(`nettact-lite --help` /

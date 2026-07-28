@@ -217,6 +217,32 @@ curl -fsSL https://d.nettact.org/agent/install.sh | bash -s -- --docker \
 
 在任一命令末尾追加 `--auto-update`，即可启用 Agent 每日自动更新。
 
+**接入时顺便选权限**(可选):追加 `--permissions`,把这台 Agent 允许采集的范围
+一次定好,免得装完再改配置重启。控制台「Agent」页会按你选的档位直接生成完整命令。
+
+```bash
+curl -fsSL https://d.nettact.org/agent/install.sh | sudo bash -s -- \
+  --server-url http://<server 主机>:12450 --token '<一次性令牌>' \
+  --permissions 'probe.icmp,probe.dns,probe.http,probe.tcp,host.cpu.read,host.memory.read'
+```
+
+不带该参数 = 使用内置默认集。注意它是**整体替换**语义,不是在默认集上追加——
+完整清单与各平台支持情况见[权限参考](./permissions.md)。
+
+**一键脚本的 Docker 安装默认监控宿主机**:在 Linux 宿主机上,`--docker` 会以
+`--network host --pid host --cap-add NET_RAW --user 0:0` 启动容器,并把宿主机
+`/proc`、`/sys` 只读挂进去,所以采到的是这台机器而不是容器自己。要改成监控容器本身,
+加 `--container-view`。
+
+几点限制:
+
+- 只对**一键脚本**成立。下面手工 `docker run` 与 compose 里的 agent 服务**默认仍是
+  容器视角**,需要自己补上这几项(compose 里有一段注释好的完整配置块)。
+- "宿主机"指 **Docker daemon 所在的机器**。Docker Desktop 下那是它的 Linux 虚拟机,
+  不是你的 Windows/macOS——Linux 容器没有办法观测外层系统。
+- **磁盘指标是例外**,即使宿主机视角下也反映容器文件系统,见
+  [权限参考](./permissions.md#host-disk-read)。
+
 **Docker(Linux,手工)**:
 
 ```bash

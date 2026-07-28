@@ -141,8 +141,11 @@ diagnostic.traceroute.icmp  diagnostic.traceroute.tcp
 方法/头/请求体的 HTTP 探测)、`network.wifi.ssid.read`、
 `network.neighbor.read` / `network.neighbor.hostname.read`(邻居/设备发现)、
 `host.*`(CPU/内存/磁盘等主机指标与进程、连接快照——按 `host.cpu.read`、
-`host.process.basic.read` 等细分)。完整 ID 清单见控制台 Agent 详情页的权限
-视图(其中会同时展示"已授予/平台支持/实际生效"三层)。
+`host.process.basic.read` 等细分)。
+
+**完整的权限 ID 清单、每条权限的用途与平台支持情况、以及接入时如何选权限,见
+[权限参考](./permissions.md)。** 控制台 Agent 详情页同样会展示"已授予 / 平台支持 /
+实际生效"三层视图,并给出可直接复制的配置行。
 
 ---
 
@@ -185,13 +188,23 @@ probe_access:
 ## 平台能力差异
 
 同一份配置在不同平台上的**实际生效权限**可能不同:实际生效 = 已授予 ∩ 平台
-支持(不支持的自动裁剪,不报错),控制台 Agent 详情页可查看三层视图。
+支持(不支持的自动裁剪,不报错),控制台 Agent 详情页可查看三层视图。注意"平台
+支持"包含**运行时权限**——同一个二进制以 root 跑和以普通用户跑,支持的权限可以不同。
 
-- **Windows(裸二进制)**:能力最全。ICMP 探测走系统 `IcmpSendEcho`,**无需
-  管理员权限**;网卡/网关/DNS/Wi-Fi 状态走系统 API。
-- **Linux(裸二进制)**:标准探测与主机指标(需授予 `host.*`)可用;依赖原始
-  套接字的能力(ICMP/traceroute)受运行账户与内核设置影响。
-- **Docker(官方 Agent 镜像)**:容器以**非 root**运行、不加任何 capability
-  (无 `NET_RAW`),支持 DNS/HTTP/TCP/NAT 探针与主机指标(主机指标仍需按上节
-  授予 `host.*` 权限);ICMP 类探测在容器内不可用(会从"实际生效"集中裁剪)。默认监控的是**容器自身**的网络视角,监控
-  宿主机需 `network_mode: host`(见[部署篇](./deploy.md#_9-让-agent-监控宿主机-可选-linux))。
+- **Windows(裸二进制)**:能力最全。ICMP 探测与 ICMP 路径诊断走系统
+  `IcmpSendEcho`,**无需管理员权限**;网卡/网关/DNS/Wi-Fi 状态走系统 API。只有
+  TCP 路径诊断需要管理员(一键脚本注册的计划任务以 SYSTEM 运行,已满足)。
+- **Linux(裸二进制)**:能力与 Windows 基本对齐——ICMP 探测、网关探测、邻居发现、
+  ICMP/TCP 路径诊断均已实现。其中 ICMP 相关能力需要 `CAP_NET_RAW`:一键脚本装出的
+  systemd 服务以 root 运行,默认全能力;以普通用户运行时,若内核
+  `net.ipv4.ping_group_range` 覆盖当前 gid,ICMP 探测仍可用,但路径诊断不可用。
+  邻居发现走 netlink,不需要任何特权。
+- **macOS(裸二进制)**:标准探测(DNS/HTTP/TCP/NAT)、网卡与 Wi-Fi 状态、主机
+  指标、进程与连接快照可用;ICMP 探测、网关探测、邻居发现与路径诊断**尚未实现**。
+- **Docker(官方 Agent 镜像)**:镜像是 Linux 构建,能力同 Linux。镜像内二进制带
+  `cap_net_raw` 文件能力,容器需以 `--cap-add NET_RAW` 启动才真正生效。
+  **默认监控的是宿主机**:一键脚本 `--docker` 会加上 `--network host --pid host`
+  并只读挂载宿主机 `/proc`、`/sys`;要改为监控容器自身,加 `--container-view`
+  (见[部署篇](./deploy.md#_9-让-agent-监控宿主机-可选-linux))。
+
+各权限逐条的平台情况见[权限参考](./permissions.md#平台支持总表)。

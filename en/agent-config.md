@@ -167,10 +167,13 @@ ones are: `probe.http.extended` (HTTP probes with custom methods/headers/bodies)
 `network.wifi.ssid.read`, `network.neighbor.read` /
 `network.neighbor.hostname.read` (neighbour/device discovery) and `host.*`
 (host metrics such as CPU/memory/disk plus process and connection snapshots —
-broken down as `host.cpu.read`, `host.process.basic.read` and so on). The
-complete list of IDs is in the permission view on the console's agent detail
-page (which shows all three layers side by side: granted / supported by the
-platform / effective).
+broken down as `host.cpu.read`, `host.process.basic.read` and so on).
+
+**The complete list of permission IDs, what each one does, its platform
+availability, and how to choose permissions at enrollment are in the
+[permission reference](./permissions.md).** The console's agent detail page shows
+the same three layers side by side (granted / supported / effective) and hands
+you a ready-to-copy configuration line.
 
 ---
 
@@ -218,18 +221,32 @@ probe_access:
 The same configuration can produce different **effective permissions** on
 different platforms: effective = granted ∩ supported by the platform
 (unsupported entries are trimmed silently, not treated as errors). The console's
-agent detail page shows all three layers.
+agent detail page shows all three layers. Note that "supported" includes
+**runtime privilege** — the same binary run as root and as an ordinary user can
+support different permissions.
 
-- **Windows (bare binary)**: the most complete. ICMP probes go through the system
-  `IcmpSendEcho`, so **no administrator privileges are needed**; interface,
-  gateway, DNS and Wi-Fi state go through system APIs.
-- **Linux (bare binary)**: standard probes and host metrics (once `host.*` is
-  granted) work; capabilities that depend on raw sockets (ICMP/traceroute) depend
-  on the account it runs as and on kernel settings.
-- **Docker (official agent image)**: the container runs as **non-root** with no
-  added capabilities (no `NET_RAW`); it supports the DNS/HTTP/TCP/NAT probes and
-  host metrics (host metrics still need the `host.*` grants described above).
-  ICMP-based probes are not available inside the container (they are trimmed from
-  the effective set). By default it monitors the network from the **container's
-  own** point of view; to monitor the Docker host you need `network_mode: host`
+- **Windows (bare binary)**: the most complete. ICMP probes and ICMP path
+  diagnostics go through the system `IcmpSendEcho`, so **no administrator
+  privileges are needed**; interface, gateway, DNS and Wi-Fi state go through
+  system APIs. Only TCP path diagnostics needs Administrator (the scheduled task
+  the installer registers runs as SYSTEM, which satisfies it).
+- **Linux (bare binary)**: broadly at parity with Windows — ICMP probing, gateway
+  probing, neighbour discovery and both traceroute modes are implemented. The
+  ICMP capabilities need `CAP_NET_RAW`: the systemd service the installer writes
+  runs as root and has everything, while an unprivileged process still gets ICMP
+  probing if the kernel's `net.ipv4.ping_group_range` covers its gid, but not path
+  diagnostics. Neighbour discovery uses netlink and needs no privilege at all.
+- **macOS (bare binary)**: standard probes (DNS/HTTP/TCP/NAT), interface and Wi-Fi
+  state, host metrics, and process/connection snapshots work; ICMP probing,
+  gateway probing, neighbour discovery and path diagnostics are **not implemented
+  yet**.
+- **Docker (official agent image)**: the image is a Linux build, so its
+  capabilities match Linux. The binary carries the `cap_net_raw` file capability,
+  which only takes effect when the container is started with `--cap-add NET_RAW`.
+  **It monitors the Docker host by default**: the installer's `--docker` mode adds
+  `--network host --pid host` and bind-mounts the host's `/proc` and `/sys`
+  read-only. To monitor the container itself instead, pass `--container-view`
   (see [the deployment guide](./deploy.md#_9-letting-the-agent-monitor-the-docker-host-optional-linux)).
+
+For the per-permission breakdown, see the
+[permission reference](./permissions.md#platform-support).
