@@ -85,10 +85,11 @@ On launch, Desktop:
 4. opens the console in the default browser through a one-time login URL; and
 5. remains in the system tray or menu bar while monitoring continues.
 
-On its first start, the bundled server needs internet access to download the
-matching web-console assets. By default, the server listens only on the
-loopback address and does not expose the console to the LAN. This changes only
-if you explicitly change the listen address in the console.
+The web console ships inside the application, so the first start needs no
+internet access to fetch frontend assets and the console opens offline. By
+default, the server listens only on the loopback address and does not expose
+the console to the LAN. This changes only if you explicitly change the listen
+address in the console.
 
 The **Start at login** option starts Desktop silently with the operating
 system, without opening a browser during sign-in. Click the tray icon or select
