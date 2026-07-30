@@ -154,10 +154,13 @@ In `-dev` mode `Secure` is never set (the local Vite dev server is plaintext).
 The frontend (web-console) is **not bundled into the binary or the image**; the
 server downloads it at runtime. The exact frontend version is baked in at compile
 time, and on the first start the server detects it is missing and downloads it
-from web-console's public GitHub release (verified by SHA256) into `-webui-dir`
-(default `<db dir>/webui`). Until the download completes, non-`/api` paths return
-a built-in placeholder page (503) while the API and the probes keep working; on
-failure it retries in the background.
+from the [NetTact Download Center](https://d.nettact.org) (verified by SHA256)
+into `-webui-dir` (default `<db dir>/webui`). Until the download completes,
+non-`/api` paths return a built-in placeholder page (503) while the API and the
+probes keep working; on failure it retries in the background. The default asset
+layout is `https://d.nettact.org/web-console/<tag>/<asset>`. The download
+center's Cloudflare Worker accesses official GitHub Releases, including private
+repositories, so the server needs no GitHub credentials.
 
 Two optional environment variables override this behaviour (for development or
 isolated networks):
@@ -165,4 +168,4 @@ isolated networks):
 | Environment variable | What it does |
 |---|---|
 | `NETTACT_WEBUI_LOCAL` | Serve a local dist directory directly (e.g. `../web-console/dist`). Development builds (`Version=dev`, no baked-in version) do not download automatically — use this. |
-| `NETTACT_WEBUI_BASE_URL` | Point the download source at an internal mirror. You can also go fully offline by pre-installing the frontend into `<webui-dir>/<version>/`. |
+| `NETTACT_WEBUI_BASE_URL` | Override the download source; it must expose the `<base>/<tag>/<asset>` layout. You can also go fully offline by pre-installing the frontend into `<webui-dir>/<version>/`. |

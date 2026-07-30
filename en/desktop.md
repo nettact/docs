@@ -11,8 +11,12 @@ use **Exit** from the tray or menu-bar menu to stop the application.
 
 ## Download the latest version
 
-These stable URLs always point to the most recently published successful
-Desktop release. The download mirror retains only the latest version.
+All installers, checksums, and version history are distributed through the
+[NetTact Download Center](https://d.nettact.org). A Cloudflare Worker retrieves
+approved assets from official GitHub Releases, including private repositories;
+downloaders do not need a GitHub token. These stable URLs always point to the
+most recently published successful Desktop release, while previous versions
+remain available from the download center.
 
 | Platform | Download | SHA-256 |
 |---|---|---|

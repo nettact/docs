@@ -1,8 +1,13 @@
 # One-command deploy
 
 Deploy NetTact's **server (server-lite)** and **agent** with Docker Compose.
-The server ships with the web console built in; the agent is a pure outbound
-client (it listens on no ports) that dials out to the server.
+The server provides the web console; the agent is a pure outbound client (it
+listens on no ports) that dials out to the server.
+
+Installers, standalone binaries, checksums, and version history are distributed
+through the [NetTact Download Center](https://d.nettact.org). A Cloudflare
+Worker retrieves assets from official GitHub Releases, including private
+repositories; deployments do not need GitHub credentials.
 
 > Supported: Docker Engine 24+ with bundled Compose v2 (the `docker compose`
 > subcommand). The old standalone `docker-compose` (v1) is untested.
@@ -49,8 +54,8 @@ step that fails prints the reason plus the manual fallback command for it.
 
 The source is owned by the `server-lite` repository at
 [`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh).
-From the NetTact superproject root, run
-run `./deploy/install.sh`. The script uses local `docker-compose.yml` and
+From the `server-lite` repository, run `./deploy/install.sh`. The script uses
+local `docker-compose.yml` and
 `.env.example` files when they exist in the current directory, otherwise it
 downloads them from `https://d.nettact.org`. Set `NETTACT_DIST_BASE_URL` to
 use an internal mirror.
@@ -291,9 +296,16 @@ docker run -d --name nettact-agent --restart unless-stopped \
   ghcr.io/nettact/nettact-agent:latest
 ```
 
-**Bare binary (Windows / Linux)**: download `nettact-agent` for your platform
-from the agent repository's releases and write a YAML config file (see
-`agent/agent.example.yaml`):
+**Bare binary (Windows / Linux)**: download the latest build for your platform
+from the download center, or select an older version on the
+[download center home page](https://d.nettact.org):
+
+- [Windows x64](https://d.nettact.org/agent/nettact-agent-windows-amd64.exe)
+- [Linux x64](https://d.nettact.org/agent/nettact-agent-linux-amd64)
+- [Linux ARM64](https://d.nettact.org/agent/nettact-agent-linux-arm64)
+- [SHA256 checksums](https://d.nettact.org/agent/SHA256SUMS)
+
+Then write a YAML config file (see `agent/agent.example.yaml`):
 
 ```yaml
 # nettact-agent.yaml (next to the binary, or at the platform's conventional path; chmod 600 recommended)
@@ -342,8 +354,9 @@ agent in this build only runs DNS/HTTP/TCP/NAT probes and host metrics, needs
 - **Changes to .env have no effect**: `.env` is only read on `up`/`pull`, so run
   `docker compose up -d` to recreate the containers.
 - **The console will not open even though the API works (placeholder page / 503)**:
-  the server downloads its frontend from a GitHub release at runtime, so the
-  first start needs internet access. If the download fails it serves a
-  placeholder page and retries in the background; on an isolated network, point
-  `NETTACT_WEBUI_BASE_URL` at a mirror (see
+  on its first start, the server downloads its frontend from
+  `https://d.nettact.org`. If the download fails it serves a placeholder page
+  and retries in the background. Confirm that the server can reach the download
+  center; on an isolated network, point `NETTACT_WEBUI_BASE_URL` at a compatible
+  source (see
   [Server configuration](./server-config.md#the-web-console-frontend)).

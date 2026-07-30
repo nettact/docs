@@ -1,7 +1,11 @@
 # 一键部署
 
 用 Docker Compose 部署 NetTact 的 **Server(server-lite)** 与 **Agent**。
-Server 内置 Web 控制台;Agent 是纯出站客户端(不监听任何端口),通过网络主动连到 Server。
+Server 提供 Web 控制台;Agent 是纯出站客户端(不监听任何端口),通过网络主动连到 Server。
+
+安装脚本、裸二进制、校验文件和历史版本统一通过
+[NetTact 下载中心](https://d.nettact.org) 分发。下载中心由 Cloudflare Worker 从
+官方 GitHub Release 获取资产，也支持私有仓库；部署端无需 GitHub Token。
 
 > 适用版本:Docker Engine 24+ 且自带 Compose v2(`docker compose` 子命令)。
 > 旧的独立 `docker-compose`(v1)未测试。
@@ -44,7 +48,7 @@ bash install.sh
 
 脚本源码归属 `server-lite` 仓库，路径为
 [`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh)。
-`server-lite` 仓库时运行 `./deploy/install.sh`。当前目录存在
+在 `server-lite` 仓库中可运行 `./deploy/install.sh`。当前目录存在
 `docker-compose.yml` 与 `.env.example` 时优先使用本地文件，否则从
 `https://d.nettact.org` 下载。内网镜像源可通过 `NETTACT_DIST_BASE_URL` 覆盖。
 
@@ -254,8 +258,15 @@ docker run -d --name nettact-agent --restart unless-stopped \
   ghcr.io/nettact/nettact-agent:latest
 ```
 
-**裸二进制(Windows / Linux)**:从 agent 仓库的 Release 下载对应平台的
-`nettact-agent`,写一个 YAML 配置文件(参考 `agent/agent.example.yaml`):
+**裸二进制(Windows / Linux)**:从下载中心获取对应平台的最新版，也可在
+[下载中心首页](https://d.nettact.org) 选择历史版本:
+
+- [Windows x64](https://d.nettact.org/agent/nettact-agent-windows-amd64.exe)
+- [Linux x64](https://d.nettact.org/agent/nettact-agent-linux-amd64)
+- [Linux ARM64](https://d.nettact.org/agent/nettact-agent-linux-arm64)
+- [SHA256 校验清单](https://d.nettact.org/agent/SHA256SUMS)
+
+下载后写一个 YAML 配置文件(参考 `agent/agent.example.yaml`):
 
 ```yaml
 # nettact-agent.yaml(与二进制同目录,或放平台惯例路径;建议 chmod 600)
@@ -293,6 +304,7 @@ enroll_token: "<一次性令牌>"
 - **server 一直 unhealthy**:`docker compose logs server` 看 DB 迁移 / 端口占用;
   确认 `NETTACT_HTTP_PORT` 未被别的进程占用。
 - **改了 .env 不生效**:`.env` 只在 `up`/`pull` 时读取,需 `docker compose up -d` 重建。
-- **控制台打不开但 API 正常(占位页/503)**:Server 的前端是运行时从 GitHub Release
-  下载的,首启需要外网;下载失败会展示占位页并后台重试,内网环境可用
-  `NETTACT_WEBUI_BASE_URL` 指向镜像源(见 [Server 配置](./server-config.md#web-控制台前端))。
+- **控制台打不开但 API 正常(占位页/503)**:Server 首次启动时会从
+  `https://d.nettact.org` 下载前端;下载失败会展示占位页并后台重试。确认 Server
+  能访问下载中心。内网环境可用 `NETTACT_WEBUI_BASE_URL` 指向兼容下载源(见
+  [Server 配置](./server-config.md#web-控制台前端))。

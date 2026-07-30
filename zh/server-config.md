@@ -130,13 +130,16 @@ server-info 会标示当前地址来源)。若保存的地址无法绑定(端口
 ## Web 控制台前端
 
 前端(web-console)**不打包进二进制/镜像**,由 Server 运行时自动下载:编译时
-烧入精确的前端版本号,首启检测到缺失就从 web-console 的公开 GitHub Release 下载
-(SHA256 校验)到 `-webui-dir`(默认 `<db 目录>/webui`),下载完成前非 `/api`
-路径返回内置占位页(503),API 与探针不受影响,失败后台重试。
+烧入精确的前端版本号,首启检测到缺失就从
+[NetTact 下载中心](https://d.nettact.org) 下载(SHA256 校验)到 `-webui-dir`
+(默认 `<db 目录>/webui`),下载完成前非 `/api` 路径返回内置占位页(503),API 与探针
+不受影响,失败后台重试。默认下载路径为
+`https://d.nettact.org/web-console/<tag>/<asset>`。下载中心的 Cloudflare Worker
+负责访问官方 GitHub Release(包括私有仓库),Server 无需配置 GitHub Token。
 
 两个可选环境变量覆盖此行为(开发/内网场景):
 
 | 环境变量 | 作用 |
 |---|---|
 | `NETTACT_WEBUI_LOCAL` | 直接服务本地目录里的 dist(如 `../web-console/dist`);开发构建(`Version=dev`,未烧版本)不自动下载,用这个。 |
-| `NETTACT_WEBUI_BASE_URL` | 覆盖下载源为内网镜像;也可以完全离线——把前端预置到 `<webui-dir>/<version>/`。 |
+| `NETTACT_WEBUI_BASE_URL` | 覆盖下载源;源必须提供 `<base>/<tag>/<asset>` 布局。也可以完全离线——把前端预置到 `<webui-dir>/<version>/`。 |
