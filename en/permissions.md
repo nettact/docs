@@ -190,13 +190,28 @@ is nothing to configure — it monitors your own computer.
 
 About 🔑:
 
-**Why ICMP probing needs no privilege**: sending an echo and reading the reply is
-all an **unprivileged ping socket** (`SOCK_DGRAM`/`IPPROTO_ICMP`) has to do, and
-the kernel allows it whenever `net.ipv4.ping_group_range` covers the process's
-gid — the default on common distributions and inside Docker containers
-(`0 2147483647`). The Agent tries a raw socket first and falls back to a ping
-socket automatically. Measured: an ordinary user on the host, and a plain non-root
-container with no added capabilities, both get ICMP probing and gateway probing.
+**Why ICMP probing does not always need privilege**: sending an echo and reading
+the reply is all an **unprivileged ping socket** (`SOCK_DGRAM`/`IPPROTO_ICMP`)
+has to do, and the kernel allows it whenever `net.ipv4.ping_group_range` covers
+the process's gid. The Agent tries a raw socket first and falls back to a ping
+socket automatically; only when neither works does it report these permissions as
+unsupported.
+
+**Bare metal and containers are opposites here.** Most distributions leave the
+range open on bare metal (`0 2147483647`), which is why an ordinary user can
+ping — but **the kernel starts every new network namespace at `1 0`: an empty
+range, no gid may ping**, and dockerd does not change it. A plain non-root
+container therefore has neither path open, and ICMP and gateway probing are
+honestly reported as unsupported. To check:
+
+```bash
+docker exec <container> cat /proc/sys/net/ipv4/ping_group_range   # want 0	2147483647
+```
+
+Open it with `--sysctl net.ipv4.ping_group_range="0 2147483647"` on the container
+(the compose file the agent installer generates for `--docker` already carries
+that line). It applies to that container's own network namespace and grants
+nothing on the host.
 
 **Path diagnostics is what genuinely needs a raw socket**: it must receive the
 Time-Exceeded replies intermediate routers send back, which an unprivileged ping
@@ -208,30 +223,31 @@ By platform:
   the installer registers runs as SYSTEM, which satisfies it; a hand-launched
   binary needs "Run as administrator". ICMP goes through the system
   `IcmpSendEcho` and needs no elevation.
-- **Linux**: ICMP probing and gateway probing work out of the box (above). Both
-  traceroute modes need `CAP_NET_RAW` or root; the systemd service the installer
-  writes runs as root, so a default install has everything. Switching
-  `net.ipv4.ping_group_range` off (`1 0`) without `CAP_NET_RAW` takes ICMP probing
-  away too — the console then reports it as unavailable.
+- **Linux (bare metal)**: ICMP probing and gateway probing usually work out of
+  the box (above). Both traceroute modes need `CAP_NET_RAW` or root; the systemd
+  service the installer writes runs as root, so a default install has everything.
+  With `net.ipv4.ping_group_range` off (`1 0`) and no `CAP_NET_RAW`, ICMP probing
+  goes away too — the console then reports it as unavailable.
 - **Docker**: the official image carries **no** file capability — one would make
   a `--cap-drop ALL` container fail to start outright, and since Docker's default
   bounding set already contains NET_RAW it would quietly hand raw sockets to every
   container. A non-root container therefore only ever gets a ping socket, even
-  with `--cap-add NET_RAW`, so **that flag alone achieves nothing**. The
-  installer's `--docker` host view reaches a raw socket with `--user 0:0
-  --cap-add NET_RAW`, and **that is only for path diagnostics**: without it, ICMP
-  probing and gateway probing still work and only path diagnostics is reported
-  unsupported.
+  with `--cap-add NET_RAW` — its permitted set is empty regardless, so **that
+  flag alone achieves nothing**. The installer's `--docker` host view reaches a
+  raw socket with `--user 0:0 --cap-add NET_RAW`, and **that is only for path
+  diagnostics**. The container view (`--container-view`) stays non-root and has
+  no path diagnostics; its ICMP and gateway probing depend on the
+  `ping_group_range` sysctl described above.
 - **macOS**: the ❌ rows are not implemented in the macOS build yet; neither
   granting nor elevating enables them.
 
 ### Docker: whose machine are you monitoring?
 
 By default a container sees only **its own** network and processes. The
-installer's `--docker` mode therefore switches to a **host view**:
-`--network host --pid host`, with the host's `/proc` and `/sys` bind-mounted
-read-only (`HOST_PROC` / `HOST_SYS`). To monitor the container itself, add
-`--container-view`.
+installer's `--docker` mode therefore switches to a **host view** — the compose
+file it generates carries `network_mode: host` and `pid: host`, with the host's
+`/proc` and `/sys` bind-mounted read-only (`HOST_PROC` / `HOST_SYS`). To monitor
+the container itself, add `--container-view`.
 
 Doing this halfway produces data that looks right and is not — host interfaces
 beside container processes — so these settings go together or not at all.
@@ -246,10 +262,11 @@ Purpose, dependencies and platform availability for each one.
 
 Probe target reachability and latency with ICMP (ping). Windows ✅ / Linux ✅ / macOS ❌.
 
-**No privilege is required on Linux**: an unprivileged ping socket suffices, as
-long as `net.ipv4.ping_group_range` covers the process's gid (the common default).
-It becomes unavailable only when that sysctl is switched off and the process has
-no `CAP_NET_RAW`.
+**Privilege is not always required on Linux**: an unprivileged ping socket
+suffices, as long as `net.ipv4.ping_group_range` covers the process's gid — the
+default on most distributions on bare metal, and **the opposite inside a
+container** (`1 0`, until a `--sysctl` opens it). It is unavailable when that
+sysctl is closed and the process has no `CAP_NET_RAW`.
 
 #### probe.dns {#probe-dns}
 
@@ -491,13 +508,16 @@ unprivileged ping socket. The systemd service the installer writes runs as root
 and has both; a container needs to run as root (`--user 0:0 --cap-add NET_RAW`).
 
 **Not even ICMP probing works on Linux.**
-`net.ipv4.ping_group_range` has been switched off (set to `1 0`) and the process
-has no `CAP_NET_RAW`. Open that sysctl up, or run the Agent as root / with
-`CAP_NET_RAW`.
+`net.ipv4.ping_group_range` is closed (`1 0`) and the process has no
+`CAP_NET_RAW`. Inside a **container** that is the default state rather than
+something somebody changed: recreate it with
+`--sysctl net.ipv4.ping_group_range="0 2147483647"` (the compose file the
+installer generates already has it). On bare metal, open the sysctl or run the
+Agent as root / with `CAP_NET_RAW`.
 
 **The container reports its own data instead of the host's.**
-It was installed with `--container-view`, or started by hand without the host-view
-settings. See [Docker: whose machine are you
+It was installed with `--container-view`, or started by hand without the
+host-view settings. See [Docker: whose machine are you
 monitoring?](#docker-whose-machine-are-you-monitoring).
 
 **Can the console change permissions remotely?**

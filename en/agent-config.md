@@ -232,21 +232,38 @@ support different permissions.
   the installer registers runs as SYSTEM, which satisfies it).
 - **Linux (bare binary)**: broadly at parity with Windows — ICMP probing, gateway
   probing, neighbour discovery and both traceroute modes are implemented. The
-  ICMP capabilities need `CAP_NET_RAW`: the systemd service the installer writes
-  runs as root and has everything, while an unprivileged process still gets ICMP
-  probing if the kernel's `net.ipv4.ping_group_range` covers its gid, but not path
-  diagnostics. Neighbour discovery uses netlink and needs no privilege at all.
+  systemd service the installer writes runs as root and has everything. Run as an
+  ordinary user, path diagnostics require `CAP_NET_RAW` outright (they have to
+  receive the intermediate Time-Exceeded replies, and only a raw socket delivers
+  those), while ICMP and gateway probing have a fallback: an unprivileged ping
+  socket, available whenever the kernel's `net.ipv4.ping_group_range` covers the
+  process's gid. Most distributions leave that range open on bare metal;
+  **inside a container the opposite is true** (see below). Neighbour discovery
+  uses netlink and needs no privilege at all.
 - **macOS (bare binary)**: standard probes (DNS/HTTP/TCP/NAT), interface and Wi-Fi
   state, host metrics, and process/connection snapshots work; ICMP probing,
   gateway probing, neighbour discovery and path diagnostics are **not implemented
   yet**.
 - **Docker (official agent image)**: the image is a Linux build, so its
-  capabilities match Linux. The binary carries the `cap_net_raw` file capability,
-  which only takes effect when the container is started with `--cap-add NET_RAW`.
-  **It monitors the Docker host by default**: the installer's `--docker` mode adds
-  `--network host --pid host` and bind-mounts the host's `/proc` and `/sys`
-  read-only. To monitor the container itself instead, pass `--container-view`
-  (see [the deployment guide](./deploy.md#_9-letting-the-agent-monitor-the-docker-host-optional-linux)).
+  capabilities match Linux — but it deliberately carries **no** `cap_net_raw`
+  file capability. (With one, `--cap-drop ALL` — a common hardening default —
+  would make execve fail with EPERM and the agent would not start at all; and
+  since Docker's default bounding set already contains NET_RAW, a file capability
+  would quietly hand raw sockets to every container.) Raw-socket access is
+  granted at **run time** instead: `--user 0:0` *plus* `--cap-add NET_RAW`.
+  `--cap-add` alone does nothing for a non-root process, whose permitted set is
+  empty regardless.
+  **It monitors the Docker host by default**: the compose file the installer
+  generates for `--docker` carries `network_mode: host`, `pid: host`,
+  `user: "0:0"` and `cap_add: [NET_RAW]`, and bind-mounts the host's `/proc` and
+  `/sys` read-only. Pass `--container-view` to monitor the container itself: the
+  container then stays non-root and has no path diagnostics, but ICMP and gateway
+  probing still work, thanks to the
+  `sysctls: net.ipv4.ping_group_range: "0 2147483647"` line in the generated
+  compose file. **That line is required**: a new network namespace starts at
+  `1 0` (an empty range) and dockerd does not change it, so the bare-metal
+  assumption that "an ordinary user can ping" does not hold in a container. See
+  [the deployment guide](./deploy.md#_9-host-view-vs-container-view-docker-installs).
 
 For the per-permission breakdown, see the
 [permission reference](./permissions.md#platform-support).

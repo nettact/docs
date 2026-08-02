@@ -195,16 +195,24 @@ probe_access:
   `IcmpSendEcho`,**无需管理员权限**;网卡/网关/DNS/Wi-Fi 状态走系统 API。只有
   TCP 路径诊断需要管理员(一键脚本注册的计划任务以 SYSTEM 运行,已满足)。
 - **Linux(裸二进制)**:能力与 Windows 基本对齐——ICMP 探测、网关探测、邻居发现、
-  ICMP/TCP 路径诊断均已实现。其中 ICMP 相关能力需要 `CAP_NET_RAW`:一键脚本装出的
-  systemd 服务以 root 运行,默认全能力;以普通用户运行时,若内核
-  `net.ipv4.ping_group_range` 覆盖当前 gid,ICMP 探测仍可用,但路径诊断不可用。
-  邻居发现走 netlink,不需要任何特权。
+  ICMP/TCP 路径诊断均已实现。一键脚本装出的 systemd 服务以 root 运行,默认全能力。
+  以普通用户运行时:路径诊断必须有 `CAP_NET_RAW`(它要收中间路由的 Time-Exceeded,
+  只有裸 socket 能收),而 ICMP 探测与网关探测还有一条退路——非特权 ping socket,
+  条件是内核 `net.ipv4.ping_group_range` 覆盖当前进程的 gid。多数发行版在裸机上
+  默认开着这个区间,**容器里则相反**(见下)。邻居发现走 netlink,不需要任何特权。
 - **macOS(裸二进制)**:标准探测(DNS/HTTP/TCP/NAT)、网卡与 Wi-Fi 状态、主机
   指标、进程与连接快照可用;ICMP 探测、网关探测、邻居发现与路径诊断**尚未实现**。
-- **Docker(官方 Agent 镜像)**:镜像是 Linux 构建,能力同 Linux。镜像内二进制带
-  `cap_net_raw` 文件能力,容器需以 `--cap-add NET_RAW` 启动才真正生效。
-  **默认监控的是宿主机**:一键脚本 `--docker` 会加上 `--network host --pid host`
-  并只读挂载宿主机 `/proc`、`/sys`;要改为监控容器自身,加 `--container-view`
-  (见[部署篇](./deploy.md#_9-让-agent-监控宿主机-可选-linux))。
+- **Docker(官方 Agent 镜像)**:镜像是 Linux 构建,能力同 Linux,但镜像**故意不带**
+  `cap_net_raw` 文件能力(带了的话,`--cap-drop ALL` 这种常见加固会让 execve 直接
+  EPERM,容器根本起不来;而且 Docker 默认 bounding set 里就有 NET_RAW,等于偷偷把
+  裸 socket 发给每个容器)。所以裸 socket 靠**运行时**给:`--user 0:0` 加
+  `--cap-add NET_RAW`——只加 `--cap-add` 对非 root 进程无效,它的 permitted set 是空的。
+  **默认监控的是宿主机**:一键脚本 `--docker` 生成的 compose 带 `network_mode: host`、
+  `pid: host`、`user: "0:0"`、`cap_add: [NET_RAW]` 并只读挂载宿主机 `/proc`、`/sys`;
+  要改为监控容器自身,加 `--container-view`——那时容器保持非 root,没有路径诊断,但
+  ICMP 探测与网关探测仍可用,靠生成的 compose 里那句
+  `sysctls: net.ipv4.ping_group_range: "0 2147483647"`。**这句必须有**:新网络命名
+  空间的内核默认值是 `1 0`(空区间),dockerd 不会改它,所以容器里"普通用户能 ping"
+  这个裸机上的常识**不成立**。细节见[部署篇](./deploy.md#_9-宿主机视角与容器视角-docker-安装)。
 
 各权限逐条的平台情况见[权限参考](./permissions.md#平台支持总表)。

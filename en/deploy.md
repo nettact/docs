@@ -1,8 +1,13 @@
 # One-command deploy
 
-Deploy NetTact's **server (server-lite)** and **agent** with Docker Compose.
-The server provides the web console; the agent is a pure outbound client (it
-listens on no ports) that dials out to the server.
+Deploy NetTact's **server (server-lite)** with Docker Compose. The server
+provides the web console.
+
+**The agent is not part of this compose file.** It is installed on each machine
+you want monitored — including the one running the server — and joins with a
+one-time token minted in the console; see [section 8](#_8-installing-an-agent-on-a-machine).
+The agent is a pure outbound client (it listens on no ports) that dials out to
+the server.
 
 Installers, standalone binaries, checksums, and version history are distributed
 through the [NetTact Download Center](https://d.nettact.org). A Cloudflare
@@ -19,11 +24,10 @@ For the full configuration reference, see:
 
 ## 1. One-command install script (Linux)
 
-On a Linux host with nothing but Docker installed, a single command runs the
-whole deployment — it downloads the compose assets, generates `.env` and the
-secret, brings up the server, waits for it to become healthy, logs in
-automatically and issues an enrollment token, brings up the agent and confirms
-it enrolled, then prints the console URL and the first-run password:
+On a Linux host with nothing but Docker installed, a single command deploys the
+server — it puts the compose assets in `~/nettact`, generates `.env`, brings the
+server up, waits for it to become healthy, then prints the console URL and the
+first-run password:
 
 ```bash
 curl -fsSL https://d.nettact.org/install.sh | bash
@@ -42,23 +46,48 @@ Common options (`bash install.sh --help` lists them all):
 | Option | What it does |
 |---|---|
 | `--port <n>` | Console port (written to `.env` as `NETTACT_HTTP_PORT`, default 12450) |
-| `--lite-version` / `--agent-version <tag>` | Pin the image versions (default `latest`) |
-| `--server-only` | Deploy the server only |
-| `--host-network` | Have the agent monitor the host network (Linux; trade-offs in section 9) |
-| `--auto-update` | Check daily for a new Agent image and restart the Agent automatically. |
-| `-y` / `--yes` | Non-interactive (on a non-first run where the password cannot be retrieved automatically, it prints the manual fallback command instead) |
+| `--lite-version <tag>` | Pin the server image version (default `latest`) |
 
-The script is **idempotent**: re-running it leaves an existing `.env`, secret and
-data volumes untouched, so it is safe to re-run after a partial failure. Every
+| Environment | What it does |
+|---|---|
+| `NETTACT_INSTALL_DIR` | Where to install (default: `~/nettact`) |
+| `NETTACT_DIST_BASE_URL` | Where the compose assets are downloaded from (internal mirror) |
+
+**The script installs the server only, never an agent.** Which machines are
+monitored is a decision taken one machine at a time, and an agent has its own
+installer and its own release cadence; bundling one in here made a local agent
+look like part of the server rather than a choice someone made. Install agents
+as in section 8 — on this machine too, if you want it monitored.
+
+**The install directory is `~/nettact`, not the directory you ran the script
+from.** The deployment outlives the shell that created it, so its compose file
+and `.env` need one predictable home: not a git working tree that gets pulled
+and rewritten underneath it, and not whichever directory someone happened to be
+standing in. Every operational command runs from there afterwards:
+
+```bash
+cd ~/nettact && docker compose ps
+```
+
+Run from a NetTact checkout, the script **copies** that checkout's
+`docker-compose.yml` and `.env.example` into the install directory and deploys
+those; with no local copy it downloads them from `https://d.nettact.org`.
+
+The script is **idempotent**: re-running it leaves an existing `.env` and the
+data volume untouched, so it is safe to re-run after a partial failure. Every
 step that fails prints the reason plus the manual fallback command for it.
+
+> **An existing deployment in a different directory** stops the script rather
+> than being installed over. Compose derives the project name from the
+> directory, so a different directory is a different project — the old
+> deployment's containers and, more to the point, its **data volume** are
+> invisible from the new one, while its fixed container name is still taken.
+> Take one of the exits the script prints: install in place with
+> `NETTACT_INSTALL_DIR=<old dir>`, or `docker compose down` in the old directory
+> first (the old database is not carried over).
 
 The source is owned by the `server-lite` repository at
 [`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh).
-From the `server-lite` repository, run `./deploy/install.sh`. The script uses
-local `docker-compose.yml` and
-`.env.example` files when they exist in the current directory, otherwise it
-downloads them from `https://d.nettact.org`. Set `NETTACT_DIST_BASE_URL` to
-use an internal mirror.
 
 The sections below are the **manual version** of that same flow, and also the
 reference for understanding each step and for troubleshooting.
@@ -67,19 +96,21 @@ reference for understanding each step and for troubleshooting.
 
 ## 2. Quick start (Docker Compose)
 
-Run this in the directory that contains `docker-compose.yml` and `.env.example`
-(the repository root):
+Put `docker-compose.yml` and `.env.example` in a fixed directory (`~/nettact`
+below, which is what the one-command script uses), then:
 
 ```bash
+mkdir -p ~/nettact && cd ~/nettact
+# copy them from a checkout, or:
+#   curl -fsSLO https://d.nettact.org/docker-compose.yml
+#   curl -fsSLO https://d.nettact.org/.env.example
+
 # 1) Prepare the configuration
 cp .env.example .env
-# Review .env as needed (port, image versions, ...); you do not need to set an
+# Review .env as needed (port, image version, ...); you do not need to set an
 # admin password — one is generated automatically on first run
 
-# 2) Start the server first
-mkdir -p secrets
-chmod 700 secrets                     # this directory is what keeps the token private (see step 5)
-touch secrets/agent_enroll_token      # placeholder: this file must exist before the first `up`
+# 2) Start the server
 docker compose up -d server
 
 # 3) Read the auto-generated admin password from the logs (printed only once)
@@ -89,26 +120,12 @@ docker compose logs server            # look for username / password in the "Net
 #    http://localhost:12450  (the port comes from NETTACT_HTTP_PORT in .env)
 #    Log in with the credentials from the previous step, then change the password under Settings
 #    (or run `docker compose exec server nettact-lite passwd -db /data/nettact.db`)
-
-# 5) On the console's "Agent" page, issue a one-time enrollment token and write it to the secret file
-printf '%s' '<paste the token generated in the console>' > secrets/agent_enroll_token
-chmod 644 secrets/agent_enroll_token  # NOT 0600 — see the note below
-
-# 6) Start the agent (it enrolls itself and starts reporting)
-docker compose up -d agent
 ```
 
-When this finishes, the agent appears in the console's agent list and starts
-reporting metrics, and the server can hand monitoring targets down to it.
-
-> **Why the token file is `0644` and the directory is `0700`.** Outside swarm,
-> compose implements a file secret as a plain bind mount of the host file and
-> silently ignores the `uid`/`gid`/`mode` secret options, so the container sees
-> the host's owner and mode verbatim. The agent image runs as a non-root user
-> (uid 100), so a `0600` file written by root is unreadable to it and the agent
-> restart-loops with `NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission
-> denied`. Locking the *directory* keeps the token just as private: the bind
-> mount reaches the file without walking `secrets/`, other local users cannot.
+The server is now up — and **nothing is being monitored yet**. The next step is
+to mint a one-time enrollment token on the console's "Agent" page and install an
+agent on the machines you care about, as described in
+[section 8](#_8-installing-an-agent-on-a-machine).
 
 Enrollment tokens are valid for 60 minutes by default and can be used only
 once. After a successful enrollment the agent stores its credentials in its own
@@ -130,17 +147,20 @@ you log in out of the box**. For production we recommend either:
 
 ## 3. Checking status
 
+From the install directory (`~/nettact`):
+
 ```bash
 docker compose ps                 # containers and health (server should be healthy)
 docker compose logs -f server     # server logs
-docker compose logs -f agent      # agent logs (enrollment, reporting)
 curl -f http://localhost:12450/api/v1/healthz   # health check, returns {"status":"ok"}
 ```
 
 The health check distinguishes "the process is up" from "the service is usable":
 it actually requests `/api/v1/healthz`, so it will not turn healthy while DB
-migrations or the listener are not ready, and `depends_on` makes the agent wait
-until the server is healthy.
+migrations or the listener are not ready.
+
+Agent logs live on the agent's own machine — see
+[section 8](#_8-installing-an-agent-on-a-machine).
 
 ---
 
@@ -150,10 +170,11 @@ The server and the agent are **released independently**, so upgrading means
 changing the matching version variable. **Back up before upgrading** (section 5).
 
 ```bash
+cd ~/nettact
 # Back up nettact-data first (see the next section)
-# Edit .env: set NETTACT_LITE_VERSION / NETTACT_AGENT_VERSION to the target versions
-docker compose pull               # pull the new images
-docker compose up -d              # recreate the containers on the new images; volumes are kept
+# Edit .env: set NETTACT_LITE_VERSION to the target version
+docker compose pull               # pull the new image
+docker compose up -d              # recreate the container on the new image; volumes are kept
 docker compose ps                 # confirm it is healthy again
 ```
 
@@ -169,8 +190,13 @@ restore from a backup (below).
 
 The persistent data you need to back up:
 
-- volume `nettact-data` → the server's `nettact.db` (including the `-wal`/`-shm` sidecar files)
-- volume `agent-data` → the agent's identity (`agent.key`), credentials (`agent.json`) and send buffer (`wal.db*`)
+- volume `nettact-data` → the server's `nettact.db` (including the `-wal`/`-shm`
+  sidecar files). This is the **only** thing worth backing up carefully:
+  monitors, metric history, alert rules and accounts all live in it.
+- on each agent machine, volume `nettact-agent-data` → that agent's identity
+  (`agent.key`), credentials (`agent.json`) and send buffer (`wal.db*`). Losing
+  it is survivable: reinstall the agent with a fresh token and it enrolls again,
+  at the cost of a stale entry to delete in the console.
 
 To get a consistent snapshot, **stop the service before backing it up** (this
 avoids copying a half-written SQLite file):
@@ -182,10 +208,13 @@ docker compose cp server:/data ./backup-$(date +%F)      # or use the volume app
 docker compose start server
 ```
 
-You can also archive the named volume directly (the volume name is
-`<project name>_nettact-data`; `docker volume ls` will show it):
+You can also archive the named volume directly. The volume name carries the
+compose project name, which comes from the directory name — installed in
+`~/nettact` that makes it `nettact_nettact-data`; `docker volume ls` will show
+it either way:
 
 ```bash
+cd ~/nettact
 docker compose stop server
 docker run --rm \
   -v "$(basename "$PWD" | tr '[:upper:]' '[:lower:]')_nettact-data":/data \
@@ -195,20 +224,28 @@ docker compose start server
 ```
 
 To restore: stop the service → extract the tar back into the volume → start the
-service. The agent works the same way (volume `agent-data`; restoring it avoids
-having to enroll again).
+service. An agent works the same way, except that its volume name is always
+`nettact-agent-data` with no project prefix; restoring it avoids having to
+enroll again.
 
 ---
 
 ## 6. Uninstalling
 
 ```bash
+cd ~/nettact
+
 # Stop and remove the containers but keep the data volumes (data is still there on the next `up`)
 docker compose down
 
 # Remove everything, including the data volumes (irreversible!)
 docker compose down -v
 ```
+
+Each agent is uninstalled on its own machine: `cd ~/nettact-agent && docker
+compose down -v`, or the native uninstall steps in
+[Agent configuration](./agent-config.md). Delete the agent's entry in the
+console afterwards.
 
 ---
 
@@ -221,31 +258,32 @@ The server can serve HTTPS/WSS natively. Once you have a certificate:
    `./certs:/certs:ro` mount and the `-tls-cert /certs/tls.crt -tls-key /certs/tls.key` lines.
 3. **Also switch the healthcheck to its https variant** (the commented-out line
    is already in the compose file): with TLS enabled the listener is TLS-only, so
-   a plaintext http health check can never pass, the server stays unhealthy
-   forever, and the agent (`depends_on: service_healthy`) never starts.
-4. `docker compose up -d server`. The console is now on `https://`, and the agent
-   connects to `https://server:12450` (the certificate must match the internal
-   compose hostname, or set `NETTACT_AGENT_TLS_INSECURE=true` as a stopgap).
+   a plaintext http health check can never pass and the server stays unhealthy
+   forever.
+4. `docker compose up -d server`. The console is now on `https://`, and every
+   agent's `--server-url` has to change to `https://<server host>:12450` to match
+   (the certificate must be one the agents can verify, or set
+   `NETTACT_AGENT_TLS_INSECURE=true` as a stopgap).
 
 `-tls-cert` and `-tls-key` must be supplied together, otherwise the server
 refuses to start (so it can never silently fall back to plaintext).
 
 ---
 
-## 8. Deploying a remote agent on another machine (optional)
+## 8. Installing an agent on a machine
 
-The agent in the compose file only monitors the machine the server runs on. To
-monitor other machines (another server, the NAS at home, a Windows PC at the
-office), run a separate agent on that machine pointing at the server's
-**externally reachable address**. Prerequisites:
+An agent goes on **every machine you want monitored**: the one running the
+server, another server, the NAS at home, a Windows PC at the office. It points
+at an address of the server that machine can reach, and needs no inbound port of
+its own. Prerequisites:
 
-1. that machine can reach the server (`http(s)://<server host>:<NETTACT_HTTP_PORT>`);
-2. you have issued a fresh one-time enrollment token for it on the console's
-   "Agent" page (one token per agent).
+1. the machine can reach the server (`http(s)://<server host>:<NETTACT_HTTP_PORT>`);
+2. a one-time enrollment token minted for it on the console's "Agent" page
+   (**one token per agent**).
 
-**Merged one-command Agent installer (Linux / macOS / Docker)**:
+One installer covers all three shapes (native Linux / macOS, and Docker):
 
-Native Linux or macOS:
+Native Linux or macOS (a systemd / launchd service; needs root):
 
 ```bash
 curl -fsSL https://d.nettact.org/agent/install.sh | sudo bash -s -- \
@@ -259,7 +297,7 @@ curl -fsSL https://d.nettact.org/agent/install.sh | bash -s -- --docker \
   --server-url http://<server host>:12450 --token '<one-time token>'
 ```
 
-Append `--auto-update` to either command to enable daily Agent updates.
+Append `--auto-update` to either command for daily automatic agent updates.
 
 **Choose permissions while you are at it** (optional): add `--permissions` to fix
 what this Agent may collect up front, instead of editing a config file and
@@ -277,35 +315,44 @@ Without the argument the Agent uses its built-in default set. Note that a list
 [permission reference](./permissions.md) for the full list and per-platform
 availability.
 
-**The one-command Docker install monitors the host by default**: on a Linux
-Docker host, `--docker` starts the container with `--network host --pid host
---cap-add NET_RAW --user 0:0` and bind-mounts the host's `/proc` and `/sys`
-read-only, so what you see is the machine rather than the container. To monitor
-the container itself, add `--container-view`.
+### What the Docker install produces
 
-Three caveats:
+`--docker` writes the deployment into **`~/nettact-agent`** (override with
+`NETTACT_AGENT_INSTALL_DIR`) and brings it up with compose:
 
-- This applies to the **one-command installer** only. The manual `docker run`
-  below and the agent service in the compose file still default to the container's
-  own view; add the same settings yourself (the compose file carries the full
-  block, commented out).
-- "Host" means the machine running the **Docker daemon**. Under Docker Desktop
-  that is its Linux VM, not your Windows or macOS system — a Linux container has
-  no way to observe the outer OS.
-- **Disk metrics are the exception** and still describe the container's
-  filesystem even in host view; see the
-  [permission reference](./permissions.md#host-disk-read).
+| File | Contents |
+|---|---|
+| `docker-compose.yml` | The container definition. Host view and container view are **two different containers**, which is why this file is generated at install time rather than shipped as a template with switches |
+| `.env` | Three knobs — image, version, `server_url`; edit and re-apply with `docker compose up -d` |
+| `enroll.token` | The one-time enrollment token, mounted read-only. It is read only while the data volume holds no credential yet, so a spent token can stay there harmlessly |
 
-**Docker (Linux, manual)**:
+Everything afterwards is ordinary compose, with no `docker run` line to
+reconstruct:
 
 ```bash
-docker run -d --name nettact-agent --restart unless-stopped \
-  -e NETTACT_AGENT_SERVER_URL=http://<server host>:12450 \
-  -e NETTACT_AGENT_ENROLL_TOKEN='<one-time token>' \
-  -e NETTACT_AGENT_DATA_DIR=/agent-data \
-  -v nettact-agent-data:/agent-data \
-  ghcr.io/nettact/nettact-agent:latest
+cd ~/nettact-agent
+docker compose ps
+docker compose logs -f
+docker compose pull && docker compose up -d     # upgrade
+docker compose down                             # uninstall (add -v to drop the identity too)
 ```
+
+The directory itself is `0700` — that is what keeps the token private. The token
+file is deliberately `0644`: the container runs as a non-root user (uid 100) and
+reads the file through a bind mount, which does not have to walk the host
+directory, so locking the directory keeps the secret without leaving the agent
+restart-looping on an unreadable token.
+
+> Requires Docker Compose v2 (the `docker compose` subcommand). Debian's
+> `docker.io` package does not ship it — install `docker-compose-plugin`. The
+> installer checks first and prints exactly this.
+
+**The Docker install monitors the host by default**: on a Linux Docker host the
+generated compose file carries `network_mode: host`, `pid: host`,
+`user: "0:0"` and `cap_add: [NET_RAW]`, and bind-mounts the host's `/proc` and
+`/sys` read-only, so what you see is the machine rather than the container. To
+monitor the container itself, add `--container-view`; the difference is
+[section 9](#_9-host-view-vs-container-view-docker-installs).
 
 **Bare binary (Windows / Linux)**: download the latest build for your platform
 from the download center, or select an older version on the
@@ -332,35 +379,63 @@ permission policy, probe target access control, ...) see
 
 ---
 
-## 9. Letting the agent monitor the Docker host (optional, Linux)
+## 9. Host view vs container view (Docker installs)
 
-By default the agent in the compose file sees the **container's own** interfaces
-and metrics. To monitor the real network of the Docker host, enable
-`network_mode: host` on the `agent` service in `docker-compose.yml` (adding
-`pid: host` if needed).
+An agent inside a container sees, by default, the **container's own** interfaces,
+processes and filesystem. That is almost never what you meant to monitor, so
+`--docker` gives you the host view — and it does so as one unit of four
+settings, because enabling only some of them produces data that looks right and
+is not (host interfaces beside container processes, or host metrics beside the
+container's own default gateway):
 
-**Note**: with `network_mode: host` the agent leaves the compose network, so the
-service name `server` no longer resolves — you must also change
-`NETTACT_AGENT_SERVER_URL` to an address reachable on the host, for example
-`http://127.0.0.1:12450` (the port must match `NETTACT_HTTP_PORT` in `.env`).
+| Setting | What it buys |
+|---|---|
+| `network_mode: host` | The host's interfaces, routes, neighbor table and default gateway |
+| `pid: host` | The host's process list |
+| `HOST_PROC` / `HOST_SYS` + read-only mounts | Host resource metrics, and where the agent itself reads routes and resolvers |
+| `user: "0:0"` + `cap_add: [NET_RAW]` | The raw ICMP socket that **path diagnostics** need |
 
-This is a deliberate trade-off, not a requirement for the probes: the Linux
-agent in this build only runs DNS/HTTP/TCP/NAT probes and host metrics, needs
-**no `NET_RAW` and no privileges**, and the container runs as non-root.
+Things worth knowing:
+
+- **"Host" means the machine running the Docker daemon.** Under Docker Desktop
+  that is its Linux VM, not your Windows or macOS system — a Linux container has
+  no way to observe the outer OS. The installer detects a non-Linux daemon,
+  falls back to the container view, and says so.
+- **Disk metrics are the exception** and still describe the container's
+  filesystem even in host view; see the
+  [permission reference](./permissions.md#host-disk-read).
+- **The container view (`--container-view`) stays non-root**, so it gets no raw
+  socket and therefore **no path diagnostics** — but ICMP and gateway probing
+  still work there. Those need only an unprivileged ping socket, which the
+  generated compose file opens with
+  `sysctls: net.ipv4.ping_group_range: "0 2147483647"`. **That line is not
+  optional**: the kernel gives every new network namespace `1 0` — an empty
+  range, no gid may ping — and dockerd does not change it. If the runtime
+  refuses the sysctl (gVisor and friends), the installer retries without it and
+  states plainly that ICMP and gateway probing will be reported as unsupported.
 
 ---
 
 ## 10. Troubleshooting
 
-- **The agent restarts in a loop / never enrolls**: usually
-  `secrets/agent_enroll_token` is empty or the token has expired (60 minutes by
-  default). Issue a new one in the console, write it to that file, and run
-  `docker compose up -d agent`.
+- **An agent never shows up in the console / its container restarts in a loop**:
+  the installer already waits for enrollment and for the process to stay up, and
+  on failure it prints the agent's log, removes the container and tells you why.
+  After the fact: `cd ~/nettact-agent && docker compose logs -f`. The usual cause
+  is an expired (60 minutes by default) or already-used token — mint a fresh one
+  in the console and re-run the install command.
 - **`NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**: the token
-  file is not readable by the agent's non-root user. Run
-  `chmod 644 secrets/agent_enroll_token && chmod 700 secrets` — see the note in
-  section 2. The container picks the token up on its next restart; no re-enrollment
-  is needed as long as the token has not expired.
+  file is not readable by the non-root user inside the container. Run
+  `chmod 644 ~/nettact-agent/enroll.token && chmod 700 ~/nettact-agent` (the
+  reasoning is in section 8). The container picks it up on its next restart; no
+  re-enrollment is needed as long as the token has not expired.
+- **ICMP or gateway probing shows as "blocked"**: in the container view this is
+  usually the ping socket. If
+  `docker exec nettact-agent cat /proc/sys/net/ipv4/ping_group_range` prints
+  `1 0`, the compose file is missing its `sysctls` block (see
+  [section 9](#_9-host-view-vs-container-view-docker-installs)). Path
+  diagnostics need the host view by design. Details in the
+  [permission reference](./permissions.md).
 - **You get logged out immediately after logging in**: see
   [About HTTPS and session cookies](#about-https-and-session-cookies) in section 2 —
   switch to HTTPS or put a reverse proxy in front (and set `NETTACT_SECURE_COOKIE=true`).

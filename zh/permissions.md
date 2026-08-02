@@ -171,11 +171,23 @@ Desktop 版内嵌的 Agent 固定为完全授权(desktop full access),不需要�
 
 关于 🔑:
 
-**为什么 ICMP 探测不需要提权**:发一个 echo 再读回复,用**无特权 ping socket**
-(`SOCK_DGRAM`/`IPPROTO_ICMP`)就够了,只要内核的 `net.ipv4.ping_group_range` 覆盖
-当前 gid——这是常见发行版与 Docker 容器的默认值(`0 2147483647`)。Agent 启动时先试
-raw、失败自动回落到 ping socket。实测:宿主机普通用户、以及**不加任何 capability 的
-非 root 容器**,ICMP 探测与网关探测都可用。
+**为什么 ICMP 探测不一定要提权**:发一个 echo 再读回复,用**无特权 ping socket**
+(`SOCK_DGRAM`/`IPPROTO_ICMP`)就够了,前提是内核的 `net.ipv4.ping_group_range`
+覆盖当前进程的 gid。Agent 启动时先试 raw socket、失败自动回落到 ping socket,两条
+都不通才把这几项报为不支持。
+
+**裸机与容器在这里正好相反。** 多数发行版在裸机上把这个区间设成开放的
+(`0 2147483647`),所以普通用户能 ping;而**内核给每个新网络命名空间的初始值是
+`1 0`——空区间,任何 gid 都不许 ping**,dockerd 并不会去改它。所以一个什么都不做的
+非 root 容器两条路都没有,ICMP 探测与网关探测会如实显示为不支持。想确认就查:
+
+```bash
+docker exec <容器> cat /proc/sys/net/ipv4/ping_group_range   # 期望 0	2147483647
+```
+
+打开它的办法是给容器加 `--sysctl net.ipv4.ping_group_range="0 2147483647"`
+(Agent 安装器 `--docker` 生成的 compose 已经带上这一句)。它只作用于该容器自己的
+网络命名空间,对宿主机没有任何影响。
 
 **路径诊断才是真的要 raw socket**:它必须收到中间路由器回的 Time-Exceeded,
 无特权 ping socket 收不到这类报文,只能走 raw(`CAP_NET_RAW` 或 root)。
@@ -184,23 +196,24 @@ raw、失败自动回落到 ping socket。实测:宿主机普通用户、以及*
 
 - **Windows**:只有 TCP 路径诊断需要管理员。一键脚本注册的计划任务以 SYSTEM 运行,
   已满足;手工双击运行则需要"以管理员身份运行"。ICMP 走系统 `IcmpSendEcho`,不需要提权。
-- **Linux**:ICMP 探测与网关探测开箱可用(见上)。两种路径诊断需 `CAP_NET_RAW` 或
-  root;一键脚本装出来的 systemd 服务以 root 运行,默认就是全能力。若把
-  `net.ipv4.ping_group_range` 关掉(`1 0`)且又没有 `CAP_NET_RAW`,则连 ICMP 探测
-  也会掉——控制台会如实显示为不可用。
+- **Linux(裸机)**:ICMP 探测与网关探测通常开箱可用(见上)。两种路径诊断需
+  `CAP_NET_RAW` 或 root;一键脚本装出来的 systemd 服务以 root 运行,默认就是全能力。
+  若 `net.ipv4.ping_group_range` 是关的(`1 0`)且又没有 `CAP_NET_RAW`,则连 ICMP
+  探测也会掉——控制台会如实显示为不可用。
 - **Docker**:官方镜像**不带**文件 capability(带了会让 `--cap-drop ALL` 的容器
   直接启动失败,而且 Docker 默认 bounding set 本来就含 NET_RAW,等于给每个容器
-  都偷偷开了 raw socket)。所以非 root 容器即使 `--cap-add NET_RAW` 也只拿得到
-  ping socket——**这个 flag 单独加没有意义**。一键脚本的 `--docker` 宿主机视角用
-  `--user 0:0 --cap-add NET_RAW` 拿到 raw,**这一步只为路径诊断**;不加时 ICMP
-  探测与网关探测照常可用,只有路径诊断报不可用。
+  都偷偷开了 raw socket)。所以非 root 容器即使 `--cap-add NET_RAW` 也拿不到 raw
+  ——它的 permitted set 是空的,**这个 flag 单独加没有意义**。一键脚本的 `--docker`
+  宿主机视角用 `--user 0:0 --cap-add NET_RAW` 拿到 raw,**这一步只为路径诊断**;
+  容器视角(`--container-view`)保持非 root,没有路径诊断,ICMP 探测与网关探测则
+  依赖上面那句 `ping_group_range` sysctl。
 - **macOS**:❌ 的几项在 macOS 构建里尚未实现,授权和提权都无法启用。
 
 ### Docker 的另一件事:采的是谁
 
-容器默认只看得到**它自己**的网络与进程。一键脚本 `--docker` 因此默认切到**宿主机视角**:
-`--network host --pid host`,并把宿主机的 `/proc`、`/sys` 只读挂进来
-(`HOST_PROC` / `HOST_SYS`)。想监控容器本身,加 `--container-view`。
+容器默认只看得到**它自己**的网络与进程。一键脚本 `--docker` 因此默认切到**宿主机视角**
+——生成的 compose 里是 `network_mode: host`、`pid: host`,并把宿主机的 `/proc`、`/sys`
+只读挂进来(`HOST_PROC` / `HOST_SYS`)。想监控容器本身,加 `--container-view`。
 
 只做一半会得到看起来对、其实错的数据(宿主机网卡配容器进程),所以这几项要么全开、
 要么全不开。
@@ -215,9 +228,10 @@ raw、失败自动回落到 ping socket。实测:宿主机普通用户、以及*
 
 用 ICMP(ping)探测目标的可达性与延迟。Windows ✅ / Linux ✅ / macOS ❌。
 
-Linux 上**不需要提权**:走无特权 ping socket 即可,前提是
-`net.ipv4.ping_group_range` 覆盖当前 gid(常见默认)。该 sysctl 被关闭且无
-`CAP_NET_RAW` 时才不可用。
+Linux 上**不一定需要提权**:走无特权 ping socket 即可,前提是
+`net.ipv4.ping_group_range` 覆盖当前进程的 gid——裸机上多数发行版默认如此,
+**容器里默认相反**(`1 0`,需要 `--sysctl` 打开)。该 sysctl 关闭且进程又无
+`CAP_NET_RAW` 时不可用。
 
 #### probe.dns {#probe-dns}
 
@@ -430,11 +444,13 @@ Agent 详情页会把它列在"受阻",并指出是哪个父权限没生效。
 root 运行,两者都有;容器需以 root 运行(`--user 0:0 --cap-add NET_RAW`)。
 
 **Linux 上连 ICMP 探测也不生效。**
-说明 `net.ipv4.ping_group_range` 被关掉了(值为 `1 0`)且进程没有 `CAP_NET_RAW`。
-放开该 sysctl,或让 Agent 以 root / 带 `CAP_NET_RAW` 运行。
+说明 `net.ipv4.ping_group_range` 是关的(值为 `1 0`)且进程没有 `CAP_NET_RAW`。
+在**容器**里这是默认状态,不是谁改过什么:加
+`--sysctl net.ipv4.ping_group_range="0 2147483647"` 重建容器即可(安装器生成的
+compose 已含此句)。裸机上则是放开该 sysctl,或让 Agent 以 root / 带 `CAP_NET_RAW` 运行。
 
 **容器里采到的是容器自己的数据。**
-用 `--container-view` 装的,或是手工 `docker run` 没加宿主机视角那几项。见上文
+用 `--container-view` 装的,或是手工起的容器没配齐宿主机视角那几项。见上文
 [Docker 的另一件事](#docker-的另一件事-采的是谁)。
 
 **控制台能不能远程改权限?**
