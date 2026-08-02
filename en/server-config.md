@@ -44,7 +44,7 @@ In a Compose deployment you do not write flags directly; you set variables in
 
 | `.env` variable | Default | What it does |
 |---|---|---|
-| `NETTACT_HTTP_PORT` | `12450` | Port published on the host (inside the container the listener is fixed at `:12450`; this variable only changes the host side of the port mapping). |
+| `NETTACT_HTTP_PORT` | `12450` | Port published on the host (inside the container the listener is fixed at `:12450`; this variable only changes the host side of the port mapping). Being the host side, it also accepts an address, which restricts the console to that interface — e.g. `10.0.0.5:12450`. |
 | `NETTACT_SECURE_COOKIE` | `auto` | Maps to `-secure-cookie`; set to `true` behind a TLS-terminating reverse proxy. |
 | `NETTACT_TZ` | `UTC` | Maps to the container's `TZ`, which decides how the timestamps **people read** are printed (notification bodies, the email footer, log lines). Any IANA zone name, e.g. `Asia/Shanghai`; the image needs no tzdata package. |
 | `NETTACT_LITE_VERSION` | `latest` | Server image tag (pinning `vX.Y.Z` is recommended for reproducible upgrades). |

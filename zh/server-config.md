@@ -40,7 +40,7 @@ Compose 部署时不直接写 flag,而是在 `.env` 里设变量,由 `docker-com
 
 | `.env` 变量 | 默认值 | 作用 |
 |---|---|---|
-| `NETTACT_HTTP_PORT` | `12450` | 发布到宿主机的端口(容器内固定监听 `:12450`,此变量只改端口映射的宿主机侧)。 |
+| `NETTACT_HTTP_PORT` | `12450` | 发布到宿主机的端口(容器内固定监听 `:12450`,此变量只改端口映射的宿主机侧)。因为改的是宿主机侧,也可以写成地址加端口把控制台限制在某张网卡上,例如 `10.0.0.5:12450`。 |
 | `NETTACT_SECURE_COOKIE` | `auto` | 映射为 `-secure-cookie`;前置 TLS 终止反代时设 `true`。 |
 | `NETTACT_TZ` | `UTC` | 映射为容器的 `TZ`,决定**给人看**的时间怎么打印(通知正文、邮件页脚、日志)。填任意 IANA 时区名如 `Asia/Shanghai`;镜像无需装 tzdata。 |
 | `NETTACT_LITE_VERSION` | `latest` | Server 镜像 tag(建议钉住 `vX.Y.Z` 便于可复现升级)。 |
