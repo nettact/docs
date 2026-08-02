@@ -78,6 +78,7 @@ cp .env.example .env
 
 # 2) Start the server first
 mkdir -p secrets
+chmod 700 secrets                     # this directory is what keeps the token private (see step 5)
 touch secrets/agent_enroll_token      # placeholder: this file must exist before the first `up`
 docker compose up -d server
 
@@ -91,6 +92,7 @@ docker compose logs server            # look for username / password in the "Net
 
 # 5) On the console's "Agent" page, issue a one-time enrollment token and write it to the secret file
 printf '%s' '<paste the token generated in the console>' > secrets/agent_enroll_token
+chmod 644 secrets/agent_enroll_token  # NOT 0600 — see the note below
 
 # 6) Start the agent (it enrolls itself and starts reporting)
 docker compose up -d agent
@@ -98,6 +100,15 @@ docker compose up -d agent
 
 When this finishes, the agent appears in the console's agent list and starts
 reporting metrics, and the server can hand monitoring targets down to it.
+
+> **Why the token file is `0644` and the directory is `0700`.** Outside swarm,
+> compose implements a file secret as a plain bind mount of the host file and
+> silently ignores the `uid`/`gid`/`mode` secret options, so the container sees
+> the host's owner and mode verbatim. The agent image runs as a non-root user
+> (uid 100), so a `0600` file written by root is unreadable to it and the agent
+> restart-loops with `NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission
+> denied`. Locking the *directory* keeps the token just as private: the bind
+> mount reaches the file without walking `secrets/`, other local users cannot.
 
 Enrollment tokens are valid for 60 minutes by default and can be used only
 once. After a successful enrollment the agent stores its credentials in its own
@@ -345,6 +356,11 @@ agent in this build only runs DNS/HTTP/TCP/NAT probes and host metrics, needs
   `secrets/agent_enroll_token` is empty or the token has expired (60 minutes by
   default). Issue a new one in the console, write it to that file, and run
   `docker compose up -d agent`.
+- **`NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**: the token
+  file is not readable by the agent's non-root user. Run
+  `chmod 644 secrets/agent_enroll_token && chmod 700 secrets` — see the note in
+  section 2. The container picks the token up on its next restart; no re-enrollment
+  is needed as long as the token has not expired.
 - **You get logged out immediately after logging in**: see
   [About HTTPS and session cookies](#about-https-and-session-cookies) in section 2 —
   switch to HTTPS or put a reverse proxy in front (and set `NETTACT_SECURE_COOKIE=true`).

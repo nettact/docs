@@ -67,6 +67,7 @@ cp .env.example .env
 
 # 2) 先启动 Server
 mkdir -p secrets
+chmod 700 secrets                     # 令牌的保密性靠这个目录(见第 5 步)
 touch secrets/agent_enroll_token      # 占位:首次 up 前该文件必须存在
 docker compose up -d server
 
@@ -80,12 +81,21 @@ docker compose logs server            # 找到 "NetTact first run" 区块里的 
 
 # 5) 在控制台「Agent」页签发一次性注册令牌(enrollment token),写入 secret 文件
 printf '%s' '<粘贴控制台生成的令牌>' > secrets/agent_enroll_token
+chmod 644 secrets/agent_enroll_token  # 不能是 0600——原因见下方说明
 
 # 6) 启动 Agent(自动注册并开始上报)
 docker compose up -d agent
 ```
 
 完成后:Agent 会出现在控制台的 Agent 列表并开始上报指标,Server 可向它下发监控目标。
+
+> **为什么令牌文件是 `0644`、目录才是 `0700`。** 非 swarm 模式下,compose 的 file
+> secret 就是把宿主文件原样 bind mount 进容器,并且会**静默忽略** `uid`/`gid`/`mode`
+> 这三个 secret 选项——容器看到的属主和权限位与宿主完全一致。而 Agent 镜像以非 root
+> 用户(uid 100)运行,root 写出的 `0600` 文件它读不了,于是 Agent 会反复重启并报
+> `NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`。把**目录**锁成
+> `0700` 一样能保密:bind mount 直达该文件、不经过 `secrets/` 目录,而本机其他用户
+> 进不去这个目录。
 
 注册令牌默认 60 分钟内有效、仅可使用一次;注册成功后 Agent 把凭据保存在自己的
 数据卷里,之后重启不再需要令牌。细节见 [Agent 配置 — 注册流程](./agent-config.md#注册流程与令牌时效)。
@@ -299,6 +309,10 @@ enroll_token: "<一次性令牌>"
 
 - **agent 反复重启 / 未注册**:多半是 `secrets/agent_enroll_token` 为空或令牌过期
   (默认 60 分钟)。到控制台重新签发,写入该文件,`docker compose up -d agent`。
+- **报 `NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**:令牌文件
+  对 Agent 的非 root 用户不可读。执行
+  `chmod 644 secrets/agent_enroll_token && chmod 700 secrets`(原因见第 2 节说明)。
+  容器下次重启即可读到,只要令牌未过期就无需重新签发。
 - **登录后立刻掉登录**:见第 2 节[关于 HTTPS 与会话 Cookie](#关于-https-与会话-cookie),
   改用 HTTPS 或反代(并设 `NETTACT_SECURE_COOKIE=true`)。
 - **server 一直 unhealthy**:`docker compose logs server` 看 DB 迁移 / 端口占用;
