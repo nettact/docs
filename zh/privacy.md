@@ -1,9 +1,9 @@
 # NetTact 隐私政策
 
 **生效日期：** 2026-07-25<br>
-**最后更新：** 2026-07-26
+**最后更新：** 2026-08-04
 
-本政策适用于通过 Microsoft Store、Mac App Store 或其他官方渠道分发的 NetTact Desktop，以及 NetTact Lite 和 NetTact Agent（统称“NetTact”）。
+本政策适用于通过 Microsoft Store、Mac App Store 或其他官方渠道分发的 NetTact Desktop，以及 NetTact Server 和 NetTact Agent（统称“NetTact”）。
 
 ## 1. 核心说明
 
@@ -20,7 +20,7 @@ NetTact 会按照下文说明，在您的设备或您自行管理的服务器上
 
 - **NetTact Desktop：** 服务器、Agent 和数据库在您的设备上运行，默认仅通过
   回环地址供本机浏览器访问。
-- **自行部署的 NetTact Lite 与 Agent：** Agent 会将数据发送到您指定的
+- **自行部署的 NetTact Server 与 Agent：** Agent 会将数据发送到您指定的
   NetTact 服务器。该服务器由您或您的组织控制，而非由我们控制。
 - 如果组织使用 NetTact 监控其设备和网络，该组织负责决定处理哪些数据、设置
   保留期限并向其用户提供必要告知。
@@ -63,13 +63,16 @@ NetTact 仅为下列目的处理上述数据：
 
 ## 5. 对外网络连接与第三方
 
-NetTact 不会把数据发送给我们的服务器。应用可能发生的对外连接如下：
+NetTact 不会把监控数据、账号信息或遥测发送给我们的服务器；但应用会访问由我们运营的
+下载站以检查和获取版本,与任何 HTTP 请求一样,这会让我们看到您的来源 IP 与常规
+请求元数据。应用可能发生的对外连接如下：
 
 | 接收方 | 何时连接 | 发送的内容 |
 |---|---|---|
 | 您配置的探测目标、DNS 解析器和 STUN 服务器 | 执行网络监控或诊断时 | 完成功能所需的 ICMP、DNS、HTTP、TCP、STUN 或 traceroute 流量。接收方通常可以看到您的来源 IP 地址和必要的协议数据 |
 | 您配置的 Webhook 或 SMTP 邮件服务器 | 发送测试或实际告警时 | 您配置的认证信息，以及告警标题、目标、状态、指标、故障详情和控制台链接等通知内容 |
 | 您自行部署的 NetTact 服务器 | 使用独立 Agent 时 | Agent 身份、设备与网络信息、监控指标、事件、清单和按需诊断结果 |
+| 由我们运营的 NetTact 下载站（`d.nettact.org`） | 启动时以及此后每 24 小时读取一次公开版本清单；自建服务器获取内置 Web 控制台时（首次运行,以及升级之后）；在 OpenWrt 路由器上每次下载 Agent 程序时——内存模式下每次开机一次,闪存模式下仅一次。以上均可改指向您自建的镜像（`NETTACT_UPDATE_BASE_URL`、`NETTACT_WEBUI_BASE_URL`、`download_base` 选项）,更新检查也可用 `NETTACT_UPDATE_BASE_URL=off` 完全关闭 | 一次普通 HTTPS 请求,不含任何监控数据、账号信息或设备标识。与任何网络请求一样,我们会取得您的来源 IP 地址,以及请求路径、User-Agent 等标准请求元数据 |
 | GitHub（`api.github.com`） | 您在非商店版本中手动选择“检查更新”时。Microsoft Store 版本的更新由商店安装，不会为此连接 GitHub | 一次普通 HTTPS 请求，不包含 NetTact 账号或监控数据库内容；与其他网络请求一样，GitHub 可能取得来源 IP 地址和标准请求元数据。参见 [GitHub 隐私声明](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
 | Microsoft 或 Apple | 获取、安装或更新商店版本时 | 由商店和操作系统独立处理的账号、购买、设备或诊断数据；具体以 [Microsoft 隐私声明](https://privacy.microsoft.com/privacystatement) 和 [Apple 隐私政策](https://www.apple.com/legal/privacy/) 为准 |
 

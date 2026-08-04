@@ -1,6 +1,6 @@
 # 一键部署
 
-用 Docker Compose 部署 NetTact 的 **Server(server-lite)**。Server 提供 Web 控制台。
+用 Docker Compose 部署 NetTact 的 **Server**。Server 提供 Web 控制台。
 
 **Agent 不在这套 compose 里**,它装在每一台你想监控的机器上——包括 Server 这台——
 用控制台签发的一次性令牌接入,见[第 8 节](#_8-在机器上安装-agent)。Agent 是纯出站
@@ -39,7 +39,7 @@ bash install.sh
 | 参数 | 作用 |
 |---|---|
 | `--port <n>` | 控制台端口(写入 `.env` 的 `NETTACT_HTTP_PORT`,默认 12450) |
-| `--lite-version <tag>` | 钉住 Server 镜像版本(默认 `latest`) |
+| `--server-version <tag>` | 钉住 Server 镜像版本(默认 `latest`) |
 
 | 环境变量 | 作用 |
 |---|---|
@@ -69,8 +69,8 @@ cd ~/nettact && docker compose ps
 > 还占着。照提示二选一:`NETTACT_INSTALL_DIR=<旧目录>` 原地安装,或在旧目录
 > `docker compose down` 之后再来(旧库不会自动迁移过来)。
 
-脚本源码归属 `server-lite` 仓库,路径为
-[`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh)。
+脚本源码归属 `server` 仓库,路径为
+[`deploy/install.sh`](https://github.com/nettact/server/blob/main/deploy/install.sh)。
 
 以下各节是同一流程的**手工版**,也是理解各步骤与排障的参考。
 
@@ -99,7 +99,7 @@ docker compose logs server            # 找到 "NetTact first run" 区块里的 
 # 4) 打开控制台并登录
 #    http://localhost:12450  (端口由 .env 的 NETTACT_HTTP_PORT 决定)
 #    用上一步日志里的账号密码登录;登录后到 Settings 修改密码
-#    (或用 `docker compose exec server nettact-lite passwd -db /data/nettact.db`)
+#    (或用 `docker compose exec server nettact-server passwd -db /data/nettact.db`)
 ```
 
 到这里 Server 就绪,但**还没有任何机器被监控**——下一步是在控制台「Agent」页签发
@@ -143,7 +143,7 @@ Server 与 Agent **各自独立发版**,各升各的。**升级前先备份**(�
 ```bash
 cd ~/nettact
 # 先备份 nettact-data(见下一节)
-# 编辑 .env:把 NETTACT_LITE_VERSION 改为目标版本
+# 编辑 .env:把 NETTACT_SERVER_VERSION 改为目标版本
 docker compose pull               # 拉取新镜像
 docker compose up -d              # 用新镜像重建容器,数据卷保留
 docker compose ps                 # 确认重新 healthy
@@ -165,7 +165,7 @@ Agent 的升级在它自己那台机器上做:`cd ~/nettact-agent && docker comp
 - 卷 `nettact-data` → Server 的 `nettact.db`(含 `-wal`/`-shm`)。这是**唯一**值得
   认真备份的东西:监控目标、历史指标、告警规则、账号都在里面。
 - 每台 Agent 机器上的卷 `nettact-agent-data` → 该 Agent 的身份(`agent.key`)、
-  凭据(`agent.json`)、发送缓冲(`wal.db*`)。不备份也无妨:重装 Agent 时用一枚新
+  凭据(`agent.json`)、发送缓冲(`wal/`)。不备份也无妨:重装 Agent 时用一枚新
   令牌重新注册即可,代价只是控制台里多一条旧记录要删。
 
 为拿到一致快照,**先停对应服务再备份**(避免拷到写了一半的 SQLite):

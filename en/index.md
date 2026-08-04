@@ -32,7 +32,7 @@ features:
     linkText: Start deploying
   - icon: 🖥️
     title: Server configuration
-    details: Every nettact-lite flag with its .env counterpart, listen address, admin credentials and password changes, data retention, TLS, session cookies.
+    details: Every nettact-server flag with its .env counterpart, listen address, admin credentials and password changes, data retention, TLS, session cookies.
     link: /en/server-config
     linkText: Read the reference
   - icon: 📡
@@ -40,6 +40,11 @@ features:
     details: Full reference for the YAML config file and environment variables, enrollment flow and token lifetime, permission policy, probe target access control, per-platform capabilities.
     link: /en/agent-config
     linkText: Read the reference
+  - icon: 📶
+    title: OpenWrt routers
+    details: Run the agent on the router, where the probes see the whole uplink. The package carries no binary, so it fits a device with 8 MB of flash.
+    link: /en/openwrt
+    linkText: Installation guide
   - icon: 🔒
     title: Privacy policy
     details: Bilingual privacy policy, inventory of data collection and outbound connections, app store disclosure mapping.
@@ -48,7 +53,7 @@ features:
 ---
 
 ::: tip The single source of truth for configuration
-The authoritative configuration list is each binary’s `--help` output (`nettact-lite --help` /
+The authoritative configuration list is each binary’s `--help` output (`nettact-server --help` /
 `nettact-agent --help`). If the docs disagree with it, `--help` wins — and please
 [send a correction](https://github.com/nettact/docs).
 :::

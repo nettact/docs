@@ -37,6 +37,7 @@ export default defineConfig({
           { text: '部署', link: '/zh/deploy' },
           { text: 'Server 配置', link: '/zh/server-config' },
           { text: 'Agent 配置', link: '/zh/agent-config' },
+          { text: 'OpenWrt', link: '/zh/openwrt' },
           { text: '权限', link: '/zh/permissions' },
           { text: '隐私政策', link: '/zh/privacy' }
         ],
@@ -47,8 +48,9 @@ export default defineConfig({
             items: [
               { text: 'Desktop 下载与使用', link: '/zh/desktop' },
               { text: '一键部署', link: '/zh/deploy' },
-              { text: 'Server 配置(nettact-lite)', link: '/zh/server-config' },
+              { text: 'Server 配置(nettact-server)', link: '/zh/server-config' },
               { text: 'Agent 配置(nettact-agent)', link: '/zh/agent-config' },
+              { text: 'OpenWrt 路由器安装', link: '/zh/openwrt' },
               { text: '权限参考', link: '/zh/permissions' }
             ]
           },
@@ -94,6 +96,7 @@ export default defineConfig({
           { text: 'Deploy', link: '/en/deploy' },
           { text: 'Server config', link: '/en/server-config' },
           { text: 'Agent config', link: '/en/agent-config' },
+          { text: 'OpenWrt', link: '/en/openwrt' },
           { text: 'Permissions', link: '/en/permissions' },
           { text: 'Privacy', link: '/en/privacy' }
         ],
@@ -104,8 +107,9 @@ export default defineConfig({
             items: [
               { text: 'Desktop download and usage', link: '/en/desktop' },
               { text: 'One-command deploy', link: '/en/deploy' },
-              { text: 'Server configuration (nettact-lite)', link: '/en/server-config' },
+              { text: 'Server configuration (nettact-server)', link: '/en/server-config' },
               { text: 'Agent configuration (nettact-agent)', link: '/en/agent-config' },
+              { text: 'OpenWrt router installation', link: '/en/openwrt' },
               { text: 'Permission reference', link: '/en/permissions' }
             ]
           },

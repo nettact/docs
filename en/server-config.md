@@ -1,13 +1,13 @@
-# Server configuration (nettact-lite)
+# Server configuration (nettact-server)
 
-`nettact-lite` is the self-hosted, single-binary server: HTTP API + built-in web
+`nettact-server` is the self-hosted, single-binary server: HTTP API + built-in web
 console + SQLite storage. It is **configured entirely through command-line
 flags** (plus two optional environment variables used for downloading the
 frontend, see [The web console frontend](#the-web-console-frontend)). In a Docker
 Compose deployment the common options are mapped to flags through `.env` (see
 [.env variable mapping](#env-variable-mapping-docker-compose)).
 
-This page matches `nettact-lite --help` item for item; if the two disagree,
+This page matches `nettact-server --help` item for item; if the two disagree,
 `--help` wins — please report the discrepancy.
 
 ---
@@ -29,7 +29,7 @@ This page matches `nettact-lite --help` item for item; if the two disagree,
 There is also one subcommand:
 
 ```
-nettact-lite passwd -db <path>     # reset the admin password offline (password recovery)
+nettact-server passwd -db <path>     # reset the admin password offline (password recovery)
 ```
 
 See [Admin credentials and password changes](#admin-credentials-and-password-changes).
@@ -47,9 +47,9 @@ In a Compose deployment you do not write flags directly; you set variables in
 | `NETTACT_HTTP_PORT` | `12450` | Port published on the host (inside the container the listener is fixed at `:12450`; this variable only changes the host side of the port mapping). Being the host side, it also accepts an address, which restricts the console to that interface — e.g. `10.0.0.5:12450`. |
 | `NETTACT_SECURE_COOKIE` | `auto` | Maps to `-secure-cookie`; set to `true` behind a TLS-terminating reverse proxy. |
 | `NETTACT_TZ` | `UTC` | Maps to the container's `TZ`, which decides how the timestamps **people read** are printed (notification bodies, the email footer, log lines). Any IANA zone name, e.g. `Asia/Shanghai`; the image needs no tzdata package. |
-| `NETTACT_LITE_VERSION` | `latest` | Server image tag (pinning `vX.Y.Z` is recommended for reproducible upgrades). |
+| `NETTACT_SERVER_VERSION` | `latest` | Server image tag (pinning `vX.Y.Z` is recommended for reproducible upgrades). |
 | `NETTACT_AGENT_VERSION` | `latest` | Agent image tag (released independently of the server). |
-| `NETTACT_LITE_IMAGE` | `ghcr.io/nettact/nettact-lite` | Override the server image reference (e.g. to test a local build). |
+| `NETTACT_SERVER_IMAGE` | `ghcr.io/nettact/nettact-server` | Override the server image reference (e.g. to test a local build). |
 | `NETTACT_AGENT_IMAGE` | `ghcr.io/nettact/nettact-agent` | Override the agent image reference. |
 
 The remaining flags — database path, TLS and so on — are added
@@ -95,8 +95,8 @@ Single-user (single-admin) model — there are no multiple users or tenants.
   Later runs ignore both flags — you cannot use them to change the password.
 - **Changing the password** (either way):
   - Console: log in and change it on the Settings page;
-  - Command line: `nettact-lite passwd -db <path>` (Compose:
-    `docker compose exec server nettact-lite passwd -db /data/nettact.db`).
+  - Command line: `nettact-server passwd -db <path>` (Compose:
+    `docker compose exec server nettact-server passwd -db /data/nettact.db`).
     The new password is entered interactively (never as a command-line argument,
     so it does not land in shell history). After a reset **all existing sessions
     are invalidated immediately**; if the server is running, restarting it once is

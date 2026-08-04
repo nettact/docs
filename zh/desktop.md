@@ -1,7 +1,7 @@
 # NetTact Desktop
 
-NetTact Desktop 是面向家庭和中小企业用户的一体化桌面版本。它把 NetTact Lite
-Server、监控 Agent 和系统托盘/菜单栏应用组合在一个程序中，不需要命令行配置、
+NetTact Desktop 是面向家庭和中小企业用户的一体化桌面版本。它把 NetTact Server、
+监控 Agent 和系统托盘/菜单栏应用组合在一个程序中，不需要命令行配置、
 单独部署 Server，也不需要手动签发 Agent 注册令牌。
 
 控制台会在系统默认浏览器中打开。Desktop 不内置 Chromium、WebView2 或 Electron；

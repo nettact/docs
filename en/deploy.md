@@ -1,6 +1,6 @@
 # One-command deploy
 
-Deploy NetTact's **server (server-lite)** with Docker Compose. The server
+Deploy NetTact's **server** with Docker Compose. The server
 provides the web console.
 
 **The agent is not part of this compose file.** It is installed on each machine
@@ -46,7 +46,7 @@ Common options (`bash install.sh --help` lists them all):
 | Option | What it does |
 |---|---|
 | `--port <n>` | Console port (written to `.env` as `NETTACT_HTTP_PORT`, default 12450) |
-| `--lite-version <tag>` | Pin the server image version (default `latest`) |
+| `--server-version <tag>` | Pin the server image version (default `latest`) |
 
 | Environment | What it does |
 |---|---|
@@ -86,8 +86,8 @@ step that fails prints the reason plus the manual fallback command for it.
 > `NETTACT_INSTALL_DIR=<old dir>`, or `docker compose down` in the old directory
 > first (the old database is not carried over).
 
-The source is owned by the `server-lite` repository at
-[`deploy/install.sh`](https://github.com/nettact/server-lite/blob/main/deploy/install.sh).
+The source is owned by the `server` repository at
+[`deploy/install.sh`](https://github.com/nettact/server/blob/main/deploy/install.sh).
 
 The sections below are the **manual version** of that same flow, and also the
 reference for understanding each step and for troubleshooting.
@@ -119,7 +119,7 @@ docker compose logs server            # look for username / password in the "Net
 # 4) Open the console and log in
 #    http://localhost:12450  (the port comes from NETTACT_HTTP_PORT in .env)
 #    Log in with the credentials from the previous step, then change the password under Settings
-#    (or run `docker compose exec server nettact-lite passwd -db /data/nettact.db`)
+#    (or run `docker compose exec server nettact-server passwd -db /data/nettact.db`)
 ```
 
 The server is now up — and **nothing is being monitored yet**. The next step is
@@ -172,7 +172,7 @@ changing the matching version variable. **Back up before upgrading** (section 5)
 ```bash
 cd ~/nettact
 # Back up nettact-data first (see the next section)
-# Edit .env: set NETTACT_LITE_VERSION to the target version
+# Edit .env: set NETTACT_SERVER_VERSION to the target version
 docker compose pull               # pull the new image
 docker compose up -d              # recreate the container on the new image; volumes are kept
 docker compose ps                 # confirm it is healthy again
@@ -194,7 +194,7 @@ The persistent data you need to back up:
   sidecar files). This is the **only** thing worth backing up carefully:
   monitors, metric history, alert rules and accounts all live in it.
 - on each agent machine, volume `nettact-agent-data` → that agent's identity
-  (`agent.key`), credentials (`agent.json`) and send buffer (`wal.db*`). Losing
+  (`agent.key`), credentials (`agent.json`) and send buffer (`wal/`). Losing
   it is survivable: reinstall the agent with a fresh token and it enrolls again,
   at the cost of a stale entry to delete in the console.
 

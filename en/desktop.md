@@ -1,7 +1,7 @@
 # NetTact Desktop
 
 NetTact Desktop is the all-in-one edition for homes and small businesses. It
-combines the NetTact Lite server, monitoring agent, and system tray or menu-bar
+combines the NetTact Server, monitoring agent, and system tray or menu-bar
 application in one program. It requires no command-line setup, separate server
 deployment, or manually issued agent enrollment token.
 

@@ -68,7 +68,7 @@ values, defaults and ranges.
 | YAML key | Environment variable | Default | Description |
 |---|---|---|---|
 | `server_url` | `NETTACT_AGENT_SERVER_URL` | — (**required**) | Server base URL, `http(s)://host:port`, e.g. `http://host:12450`. |
-| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | The agent's state directory: identity key `agent.key`, enrollment credentials `agent.json`, send buffer `wal.db*`. Backing up or migrating an agent means backing up this directory. |
+| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | The agent's state directory: identity key `agent.key`, enrollment credentials `agent.json`, and the send buffer in `wal/`. Backing up or migrating an agent means backing up this directory. |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | Skip TLS certificate verification — only for a self-signed server on your own LAN. |
 | `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `5s` | Upload cadence: how often buffered telemetry is uploaded in a batch. |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | Telemetry wire format: `protobuf` or `json`. |
@@ -267,3 +267,13 @@ support different permissions.
 
 For the per-permission breakdown, see the
 [permission reference](./permissions.md#platform-support).
+
+
+## The OpenWrt router build (lite)
+
+Routers run a trimmed build — its release assets have `-lite-` in the name — which differs from the other platforms in two ways:
+
+- **No WireGuard egress for probes.** Userspace WireGuard and the gVisor network stack it needs are the single largest part of the binary; dropping them takes it from roughly 20 MB to roughly 11 MB. A monitor pinned to a WireGuard proxy reports a configuration error (`ReasonProxyConfig`) once and does **not** fall back to a direct dial, which would silently measure a different path. SOCKS5 and HTTP CONNECT proxies are unaffected.
+- **The telemetry buffer never reaches disk.** Other platforms spill the buffer into `data_dir` when uploads stop; the router build does not, because that spends flash erase cycles on data whose whole purpose is to be uploaded immediately. The cost is that a crash or power cut loses whatever is still buffered, up to a bounded amount. The identity files (`agent.key`, `agent.json`) are unaffected — they are always written to flash, so a reboot never means re-enrolling.
+
+Everything else matches the Linux build. For installation and configuration see [OpenWrt router installation](./openwrt.md).

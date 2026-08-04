@@ -1,9 +1,9 @@
 # NetTact Privacy Policy
 
 **Effective date:** 2026-07-25<br>
-**Last updated:** 2026-07-26
+**Last updated:** 2026-08-04
 
-This policy applies to NetTact Desktop distributed through the Microsoft Store, the Mac App Store, or other official channels, as well as NetTact Lite and NetTact Agent (collectively, “NetTact”).
+This policy applies to NetTact Desktop distributed through the Microsoft Store, the Mac App Store, or other official channels, as well as NetTact Server and NetTact Agent (collectively, “NetTact”).
 
 ## 1. Key points
 
@@ -25,7 +25,7 @@ websites.
 - **NetTact Desktop:** the server, Agent, and database run on your device. By
   default, the console is available to your local browser only through a
   loopback address.
-- **Self-hosted NetTact Lite and Agent:** the Agent sends data to the NetTact
+- **Self-hosted NetTact Server and Agent:** the Agent sends data to the NetTact
   server you specify. That server is controlled by you or your organization,
   not by us.
 - If an organization uses NetTact to monitor its devices and networks, that
@@ -73,14 +73,18 @@ brokering, or training general-purpose artificial intelligence models.
 
 ## 5. Outbound connections and third parties
 
-NetTact does not send data to our servers. The app may make the following
-outbound connections:
+NetTact sends no monitoring data, account information, or telemetry to our
+servers. It does contact a NetTact-operated download host to check for and
+retrieve releases; like any HTTP request, that reveals your source IP address
+and ordinary request metadata. The app may make the following outbound
+connections:
 
 | Recipient | When | Data sent |
 |---|---|---|
 | Probe targets, DNS resolvers, and STUN servers you configure | When performing monitoring or diagnostics | ICMP, DNS, HTTP, TCP, STUN, or traceroute traffic needed for the feature. The recipient can generally see your source IP address and necessary protocol data |
 | Webhook endpoints or SMTP mail servers you configure | When sending a test or actual alert | Authentication data you configure and notification content such as alert title, target, state, metrics, failure details, and console link |
 | A NetTact server you deploy | When using a standalone Agent | Agent identity, device and network information, metrics, events, inventory, and requested diagnostic results |
+| The NetTact download host (`d.nettact.org`), operated by us | Automatically at startup and every 24 hours to read the public release catalog; when a self-hosted server fetches its bundled web console (first run, and after an upgrade); and on an OpenWrt router each time the agent binary is downloaded — on every boot in RAM mode, once in flash mode. Each can be pointed at your own mirror (`NETTACT_UPDATE_BASE_URL`, `NETTACT_WEBUI_BASE_URL`, the `download_base` option), and update checking can be switched off entirely with `NETTACT_UPDATE_BASE_URL=off` | An ordinary HTTPS request containing no monitoring data, account information, or device identifiers. As with any network request, we receive your source IP address and standard request metadata such as the requested path and user agent |
 | GitHub (`api.github.com`) | When you manually select “Check for updates” in a non-store build. A Microsoft Store build is updated by the Store and does not contact GitHub for this | An ordinary HTTPS request that does not contain your NetTact account or monitoring database content. As with other network requests, GitHub may receive your source IP address and standard request metadata. See the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement) |
 | Microsoft or Apple | When obtaining, installing, or updating a store version | Account, transaction, device, or diagnostic data independently handled by the store and operating system, subject to the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement) or [Apple Privacy Policy](https://www.apple.com/legal/privacy/) |
 

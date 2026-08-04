@@ -54,7 +54,7 @@ YAML 键与环境变量一一对应,取值、默认与范围完全相同。
 | YAML 键 | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
 | `server_url` | `NETTACT_AGENT_SERVER_URL` | —(**必填**) | Server 基址,`http(s)://主机:端口`,如 `http://host:12450`。 |
-| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | Agent 状态目录:身份密钥 `agent.key`、注册凭据 `agent.json`、发送缓冲 `wal.db*`。备份/迁移 Agent 就是备份这个目录。 |
+| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | Agent 状态目录:身份密钥 `agent.key`、注册凭据 `agent.json`、发送缓冲目录 `wal/`。备份/迁移 Agent 就是备份这个目录。 |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | 跳过 TLS 证书校验——仅限局域网自签名 Server。 |
 | `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `5s` | 上传节奏:缓冲的遥测多久批量上传一次。 |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | 遥测线格式:`protobuf` 或 `json`。 |
@@ -216,3 +216,13 @@ probe_access:
   这个裸机上的常识**不成立**。细节见[部署篇](./deploy.md#_9-宿主机视角与容器视角-docker-安装)。
 
 各权限逐条的平台情况见[权限参考](./permissions.md#平台支持总表)。
+
+
+## OpenWrt 路由器版(lite 构建)
+
+路由器上跑的是一个裁剪过的构建(发布资产名里带 `-lite-`),与其它平台有两点行为差异:
+
+- **不支持 WireGuard 出口探测。** 用户态 WireGuard 及其依赖的 gVisor 网络栈是二进制里最大的一块,去掉后体积从约 20 MB 降到约 11 MB。指定了 WireGuard 代理的监控项会报一次配置错误(`ReasonProxyConfig`),**不会**退回直连——否则测出来的是另一条路径。SOCKS5 与 HTTP CONNECT 代理不受影响。
+- **遥测缓冲只在内存中,不落盘。** 其它平台在上报中断时会把缓冲写到 `data_dir`;路由器版不会,因为那意味着用闪存擦写寿命去存一批马上就要上传的数据。代价是崩溃或断电会丢掉尚未上报的缓冲(有上限)。身份文件(`agent.key`、`agent.json`)不受影响,始终写在闪存上,重启后不需要重新注册。
+
+其余探测能力与 Linux 构建完全一致。安装与配置见 [OpenWrt 路由器安装](./openwrt.md)。

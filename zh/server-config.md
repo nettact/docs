@@ -1,11 +1,11 @@
-# Server 配置(nettact-lite)
+# Server 配置(nettact-server)
 
-`nettact-lite` 是自托管的单二进制 Server:HTTP API + 内置 Web 控制台 + SQLite
+`nettact-server` 是自托管的单二进制 Server:HTTP API + 内置 Web 控制台 + SQLite
 存储。它**完全由命令行 flag 配置**(外加两个用于前端下载的可选环境变量,见
 [Web 控制台前端](#web-控制台前端));Docker Compose 部署时,常用项通过 `.env`
 映射为 flag(见 [.env 变量对照](#env-变量对照-docker-compose))。
 
-本页与 `nettact-lite --help` 逐项对应;若两者不一致,以 `--help` 为准并请报告。
+本页与 `nettact-server --help` 逐项对应;若两者不一致,以 `--help` 为准并请报告。
 
 ---
 
@@ -26,7 +26,7 @@
 另有一个子命令:
 
 ```
-nettact-lite passwd -db <路径>     # 离线重置管理员密码(找回密码用)
+nettact-server passwd -db <路径>     # 离线重置管理员密码(找回密码用)
 ```
 
 见[管理员凭据与改密](#管理员凭据与改密)。
@@ -43,9 +43,9 @@ Compose 部署时不直接写 flag,而是在 `.env` 里设变量,由 `docker-com
 | `NETTACT_HTTP_PORT` | `12450` | 发布到宿主机的端口(容器内固定监听 `:12450`,此变量只改端口映射的宿主机侧)。因为改的是宿主机侧,也可以写成地址加端口把控制台限制在某张网卡上,例如 `10.0.0.5:12450`。 |
 | `NETTACT_SECURE_COOKIE` | `auto` | 映射为 `-secure-cookie`;前置 TLS 终止反代时设 `true`。 |
 | `NETTACT_TZ` | `UTC` | 映射为容器的 `TZ`,决定**给人看**的时间怎么打印(通知正文、邮件页脚、日志)。填任意 IANA 时区名如 `Asia/Shanghai`;镜像无需装 tzdata。 |
-| `NETTACT_LITE_VERSION` | `latest` | Server 镜像 tag(建议钉住 `vX.Y.Z` 便于可复现升级)。 |
+| `NETTACT_SERVER_VERSION` | `latest` | Server 镜像 tag(建议钉住 `vX.Y.Z` 便于可复现升级)。 |
 | `NETTACT_AGENT_VERSION` | `latest` | Agent 镜像 tag(与 Server 独立发版)。 |
-| `NETTACT_LITE_IMAGE` | `ghcr.io/nettact/nettact-lite` | 覆盖 Server 镜像地址(如本地构建测试)。 |
+| `NETTACT_SERVER_IMAGE` | `ghcr.io/nettact/nettact-server` | 覆盖 Server 镜像地址(如本地构建测试)。 |
 | `NETTACT_AGENT_IMAGE` | `ghcr.io/nettact/nettact-agent` | 覆盖 Agent 镜像地址。 |
 
 数据库路径、TLS 等其余 flag 在 `docker-compose.yml` 的 `command:` 里
@@ -83,8 +83,8 @@ server-info 会标示当前地址来源)。若保存的地址无法绑定(端口
   这两个 flag,不能用它们改密。
 - **修改密码**(任选其一):
   - 控制台:登录后 Settings 页修改;
-  - 命令行:`nettact-lite passwd -db <路径>`(compose:
-    `docker compose exec server nettact-lite passwd -db /data/nettact.db`)。
+  - 命令行:`nettact-server passwd -db <路径>`(compose:
+    `docker compose exec server nettact-server passwd -db /data/nettact.db`)。
     交互式输入新密码(不经命令行参数,不进 shell 历史);重置后**所有已登录
     会话立即失效**,服务端在运行中则建议重启一次。
 - 密码策略:至少 8 个字符。

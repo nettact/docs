@@ -31,12 +31,13 @@ counterpart switches to a 404. **Add and rename pages on both sides together.**
 | [zh/index.md](./zh/index.md) | [en/index.md](./en/index.md) | 首页,VitePress home layout(hero + features) |
 | [zh/desktop.md](./zh/desktop.md) | [en/desktop.md](./en/desktop.md) | Desktop 产品说明、Windows/macOS 最新版下载、SHA-256 校验、首次运行、运行方式与数据目录 |
 | [zh/deploy.md](./zh/deploy.md) | [en/deploy.md](./en/deploy.md) | Docker Compose 快速开始、状态查看、升级、备份与恢复、卸载、HTTPS、远程 Agent、宿主机监控、故障排查 |
-| [zh/server-config.md](./zh/server-config.md) | [en/server-config.md](./en/server-config.md) | `nettact-lite` 全部 flag 参考、`.env` 对照、监听地址、管理员凭据与改密、数据保留、TLS、会话 Cookie、前端下载 |
+| [zh/server-config.md](./zh/server-config.md) | [en/server-config.md](./en/server-config.md) | `nettact-server` 全部 flag 参考、`.env` 对照、监听地址、管理员凭据与改密、数据保留、TLS、会话 Cookie、前端下载 |
 | [zh/agent-config.md](./zh/agent-config.md) | [en/agent-config.md](./en/agent-config.md) | YAML 配置文件与环境变量完整参考、注册流程与令牌时效、权限策略、探测目标访问控制、平台能力差异 |
+| [zh/openwrt.md](./zh/openwrt.md) | [en/openwrt.md](./en/openwrt.md) | OpenWrt 路由器安装:两个 ipk、内存/闪存两种存放模式、UCI 选项、支持的架构对照表、路由器构建的功能差异、升级与排查、本地镜像 |
 | [zh/permissions.md](./zh/permissions.md) | [en/permissions.md](./en/permissions.md) | 权限参考:三层视图、整体替换语义、预设档位、四种设置方式、平台支持总表、逐条权限说明(每条带显式锚点,控制台按 `#<权限 ID 点换连字符>` 深链过来——改动锚点会让控制台的「查看文档」失效)、常见问题 |
 | [zh/privacy.md](./zh/privacy.md) | [en/privacy.md](./en/privacy.md) | Microsoft Store / Mac App Store 上架用隐私政策；中文与英文分别维护，修改内容时必须同步更新两份 |
 
-> 配置清单的单一事实来源是各二进制的 `--help` 输出(`nettact-lite --help` /
+> 配置清单的单一事实来源是各二进制的 `--help` 输出(`nettact-server --help` /
 > `nettact-agent --help`)。文档改动时与之逐项核对;若发现不一致,以 `--help`
 > 为准并请提交修正。中英两版都要同步核对。
 >
