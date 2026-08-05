@@ -5,7 +5,7 @@ provides the web console.
 
 **The agent is not part of this compose file.** It is installed on each machine
 you want monitored — including the one running the server — and joins with a
-one-time token minted in the console; see [section 8](#_8-installing-an-agent-on-a-machine).
+one-time token minted in the console; see [section 9](#_9-installing-an-agent-on-a-machine).
 The agent is a pure outbound client (it listens on no ports) that dials out to
 the server.
 
@@ -57,7 +57,7 @@ Common options (`bash install.sh --help` lists them all):
 monitored is a decision taken one machine at a time, and an agent has its own
 installer and its own release cadence; bundling one in here made a local agent
 look like part of the server rather than a choice someone made. Install agents
-as in section 8 — on this machine too, if you want it monitored.
+as in section 9 — on this machine too, if you want it monitored.
 
 **The install directory is `~/nettact`, not the directory you ran the script
 from.** The deployment outlives the shell that created it, so its compose file
@@ -125,7 +125,7 @@ docker compose logs server            # look for username / password in the "Net
 The server is now up — and **nothing is being monitored yet**. The next step is
 to mint a one-time enrollment token on the console's "Agent" page and install an
 agent on the machines you care about, as described in
-[section 8](#_8-installing-an-agent-on-a-machine).
+[section 9](#_9-installing-an-agent-on-a-machine).
 
 Enrollment tokens are valid for 60 minutes by default and can be used only
 once. After a successful enrollment the agent stores its credentials in its own
@@ -138,7 +138,7 @@ By default (`-secure-cookie auto`) the session cookie carries the `Secure` flag
 only when the server itself is running TLS, so a **plain-HTTP deployment lets
 you log in out of the box**. For production we recommend either:
 
-- configuring TLS on the server (see [Enabling HTTPS](#_7-enabling-https-optional) below), or
+- configuring TLS on the server (see [Enabling HTTPS](#_8-enabling-https-optional) below), or
 - putting a TLS-terminating reverse proxy in front (Caddy/Nginx/Traefik) and
   setting `NETTACT_SECURE_COOKIE=true` in `.env` (the browser side is https, so
   the cookie should carry `Secure`).
@@ -160,14 +160,51 @@ it actually requests `/api/v1/healthz`, so it will not turn healthy while DB
 migrations or the listener are not ready.
 
 Agent logs live on the agent's own machine — see
-[section 8](#_8-installing-an-agent-on-a-machine).
+[section 9](#_9-installing-an-agent-on-a-machine).
 
 ---
 
-## 4. Upgrading
+## 4. Automatic updates (on by default)
+
+`install.sh` attaches a **Watchtower sidecar container** (`nettact-server-updater`)
+by default. It `pull`s a new image and recreates the server container nightly at
+a **random moment in the early-morning window (02:00–05:00)**, baked into
+`NETTACT_UPDATE_CRON` on first install (host-local time), so no manual step is
+needed. To turn it off, either:
+
+- re-run the installer: `install.sh --no-auto-update` (removes
+  `COMPOSE_PROFILES=updater` from `.env` and stops a running sidecar); or
+- edit by hand: delete the `COMPOSE_PROFILES=updater` line from `.env`, then
+  `docker compose up -d --remove-orphans` to stop the sidecar.
+
+The switch is `COMPOSE_PROFILES=updater` in `.env`: as long as that line is
+present, a manual `docker compose up -d` also starts the sidecar; removing it
+takes the sidecar out of the configuration. Note that `NETTACT_AUTO_UPDATE` is
+**not** the switch — it only tells the server "a sidecar manages this install"
+so the console's software-update panel picks the right wording; setting it to
+`false` without deleting `COMPOSE_PROFILES=updater` leaves the sidecar running.
+
+**Permissions and risk**: `nettact-server-updater` mounts the host's Docker
+socket (`/var/run/docker.sock`), which is root-equivalent on this host — that is
+how Watchtower reads the registry and recreates containers, and also why the
+default-on sidecar is something you should know about. Disable it as above if
+you do not want it.
+
+**Auto-updates can cross a schema migration**: the server runs DB migrations on
+startup with **no downgrade path**, so automatic updates hand the "when to
+migrate" decision to the machine. Back up before the sidecar runs (section 6),
+and restore from that backup if an upgrade goes wrong.
+
+---
+
+## 5. Upgrading (manual)
 
 The server and the agent are **released independently**, so upgrading means
-changing the matching version variable. **Back up before upgrading** (section 5).
+changing the matching version variable. **Back up before upgrading** (section 6).
+
+> This is the manual upgrade flow. Instances with auto-update enabled do not
+> need it — the sidecar does it for you; to stay fully manual, disable
+> auto-update as in the previous section.
 
 ```bash
 cd ~/nettact
@@ -186,7 +223,7 @@ restore from a backup (below).
 
 ---
 
-## 5. Backup and restore
+## 6. Backup and restore
 
 The persistent data you need to back up:
 
@@ -230,7 +267,7 @@ enroll again.
 
 ---
 
-## 6. Uninstalling
+## 7. Uninstalling
 
 ```bash
 cd ~/nettact
@@ -249,7 +286,7 @@ console afterwards.
 
 ---
 
-## 7. Enabling HTTPS (optional)
+## 8. Enabling HTTPS (optional)
 
 The server can serve HTTPS/WSS natively. Once you have a certificate:
 
@@ -270,7 +307,7 @@ refuses to start (so it can never silently fall back to plaintext).
 
 ---
 
-## 8. Installing an agent on a machine
+## 9. Installing an agent on a machine
 
 An agent goes on **every machine you want monitored**: the one running the
 server, another server, the NAS at home, a Windows PC at the office. It points
@@ -352,7 +389,7 @@ generated compose file carries `network_mode: host`, `pid: host`,
 `user: "0:0"` and `cap_add: [NET_RAW]`, and bind-mounts the host's `/proc` and
 `/sys` read-only, so what you see is the machine rather than the container. To
 monitor the container itself, add `--container-view`; the difference is
-[section 9](#_9-host-view-vs-container-view-docker-installs).
+[section 10](#_10-host-view-vs-container-view-docker-installs).
 
 **Bare binary (Windows / Linux)**: download the latest build for your platform
 from the download center, or select an older version on the
@@ -379,7 +416,7 @@ permission policy, probe target access control, ...) see
 
 ---
 
-## 9. Host view vs container view (Docker installs)
+## 10. Host view vs container view (Docker installs)
 
 An agent inside a container sees, by default, the **container's own** interfaces,
 processes and filesystem. That is almost never what you meant to monitor, so
@@ -416,7 +453,7 @@ Things worth knowing:
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 - **An agent never shows up in the console / its container restarts in a loop**:
   the installer already waits for enrollment and for the process to stay up, and
@@ -427,13 +464,13 @@ Things worth knowing:
 - **`NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**: the token
   file is not readable by the non-root user inside the container. Run
   `chmod 644 ~/nettact-agent/enroll.token && chmod 700 ~/nettact-agent` (the
-  reasoning is in section 8). The container picks it up on its next restart; no
+  reasoning is in section 9). The container picks it up on its next restart; no
   re-enrollment is needed as long as the token has not expired.
 - **ICMP or gateway probing shows as "blocked"**: in the container view this is
   usually the ping socket. If
   `docker exec nettact-agent cat /proc/sys/net/ipv4/ping_group_range` prints
   `1 0`, the compose file is missing its `sysctls` block (see
-  [section 9](#_9-host-view-vs-container-view-docker-installs)). Path
+  [section 10](#_10-host-view-vs-container-view-docker-installs)). Path
   diagnostics need the host view by design. Details in the
   [permission reference](./permissions.md).
 - **You get logged out immediately after logging in**: see

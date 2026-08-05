@@ -3,7 +3,7 @@
 用 Docker Compose 部署 NetTact 的 **Server**。Server 提供 Web 控制台。
 
 **Agent 不在这套 compose 里**,它装在每一台你想监控的机器上——包括 Server 这台——
-用控制台签发的一次性令牌接入,见[第 8 节](#_8-在机器上安装-agent)。Agent 是纯出站
+用控制台签发的一次性令牌接入,见[第 9 节](#_9-在机器上安装-agent)。Agent 是纯出站
 客户端(不监听任何端口),通过网络主动连到 Server。
 
 安装脚本、裸二进制、校验文件和历史版本统一通过
@@ -48,7 +48,7 @@ bash install.sh
 
 **脚本只装 Server,不装 Agent。** 哪些机器该被监控是一台一台决定的事,而 Agent
 有自己的安装器、自己的版本节奏;顺手塞一个进来,只会让人以为"本机 Agent"是 Server
-的一部分。装完照第 8 节在目标机器上装 Agent 即可,Server 这台也一样。
+的一部分。装完照第 9 节在目标机器上装 Agent 即可,Server 这台也一样。
 
 **安装目录是 `~/nettact`,不是执行脚本时所在的目录。** 部署比创建它的那个 shell
 活得久,compose 文件和 `.env` 需要一个固定的家:既不该是会被 `git pull` 覆写的工作树,
@@ -103,7 +103,7 @@ docker compose logs server            # 找到 "NetTact first run" 区块里的 
 ```
 
 到这里 Server 就绪,但**还没有任何机器被监控**——下一步是在控制台「Agent」页签发
-一次性注册令牌,再照[第 8 节](#_8-在机器上安装-agent)把 Agent 装到目标机器上。
+一次性注册令牌,再照[第 9 节](#_9-在机器上安装-agent)把 Agent 装到目标机器上。
 
 注册令牌默认 60 分钟内有效、仅可使用一次;注册成功后 Agent 把凭据保存在自己的
 数据卷里,之后重启不再需要令牌。细节见 [Agent 配置 — 注册流程](./agent-config.md#注册流程与令牌时效)。
@@ -113,7 +113,7 @@ docker compose logs server            # 找到 "NetTact first run" 区块里的 
 默认(`-secure-cookie auto`)下,会话 Cookie 只在 Server 自己跑 TLS 时才带 `Secure`
 标志,所以**纯 HTTP 部署开箱即可登录**。生产环境建议:
 
-- 给 Server 配 TLS(见下方[启用 HTTPS](#_7-启用-https-可选)),或
+- 给 Server 配 TLS(见下方[启用 HTTPS](#_8-启用-https-可选)),或
 - 前置一个终止 TLS 的反向代理(Caddy/Nginx/Traefik),并在 `.env` 设
   `NETTACT_SECURE_COOKIE=true`(浏览器侧是 https,Cookie 应带 Secure)。
 
@@ -132,13 +132,45 @@ curl -f http://localhost:12450/api/v1/healthz   # 健康检查,返回 {"status":
 健康检查区分「进程在」与「服务可用」:它真正请求 `/api/v1/healthz`,DB 迁移或监听
 未就绪时不会变 healthy。
 
-Agent 的日志在它自己那台机器上看,见[第 8 节](#_8-在机器上安装-agent)。
+Agent 的日志在它自己那台机器上看,见[第 9 节](#_9-在机器上安装-agent)。
 
 ---
 
-## 4. 升级
+## 4. 自动更新(默认开启)
 
-Server 与 Agent **各自独立发版**,各升各的。**升级前先备份**(见第 5 节)。
+`install.sh` 默认给 Server 挂一个 **Watchtower 旁车容器**(`nettact-server-updater`),
+每晚在**凌晨窗口(02:00–05:00)内一个随机时刻**(首次安装时烘焙进
+`NETTACT_UPDATE_CRON`,宿主机本地时间)自动 `pull` 新镜像并重建 Server 容器,无需手动
+操作。关闭方式二选一:
+
+- 重新运行安装脚本:`install.sh --no-auto-update`(会删掉 `.env` 里的
+  `COMPOSE_PROFILES=updater`,并停掉正在运行的旁车容器);或
+- 手动编辑:删掉 `.env` 里的 `COMPOSE_PROFILES=updater` 那一行,再
+  `docker compose up -d --remove-orphans` 停掉旁车。
+
+开关由 `.env` 的 `COMPOSE_PROFILES=updater` 控制:只要这一行在,手工
+`docker compose up -d` 也会一起启动旁车;删掉它,旁车就不再是配置的一部分。注意
+`NETTACT_AUTO_UPDATE` **不是**开关——它只是告诉 Server「本实例由旁车管理」,供控制台的
+软件更新面板调整措辞;把它改成 `false` 而**不**删 `COMPOSE_PROFILES=updater`,旁车仍会
+照常自动更新。
+
+**权限与风险**:`nettact-server-updater` 挂载了宿主机的 Docker socket
+(`/var/run/docker.sock`),这等价于宿主机 root 权限——Watchtower 靠它读取镜像仓库、
+重建容器,这是自动更新的工作原理,也是为什么默认开启的旁车值得你知情。若你不接受,
+按上面任一方式关闭即可。
+
+**自动更新会跨 Schema 迁移**:Server 的数据库迁移在启动时自动执行且**没有降级路径**。
+自动更新等于把「何时跨迁移」交给机器,所以**升级前建议手动做一次备份**(见第 6 节),
+升级异常时从备份恢复。
+
+---
+
+## 5. 升级(手动)
+
+Server 与 Agent **各自独立发版**,各升各的。**升级前先备份**(见第 6 节)。
+
+> 以下为手动升级流程。开了自动更新的实例无需执行——旁车会自行完成;想完全手动,
+> 先按上一节关闭自动更新。
 
 ```bash
 cd ~/nettact
@@ -154,11 +186,11 @@ docker compose ps                 # 确认重新 healthy
 如数据结构已变则从备份恢复(见下)。
 
 Agent 的升级在它自己那台机器上做:`cd ~/nettact-agent && docker compose pull && docker compose up -d`
-(或原生安装的 `install.sh --update-only`),细节见[第 8 节](#_8-在机器上安装-agent)。
+(或原生安装的 `install.sh --update-only`),细节见[第 9 节](#_9-在机器上安装-agent)。
 
 ---
 
-## 5. 备份与恢复
+## 6. 备份与恢复
 
 需要备份的持久化数据:
 
@@ -195,7 +227,7 @@ docker compose start server
 
 ---
 
-## 6. 卸载
+## 7. 卸载
 
 ```bash
 cd ~/nettact
@@ -212,7 +244,7 @@ docker compose down -v
 
 ---
 
-## 7. 启用 HTTPS(可选)
+## 8. 启用 HTTPS(可选)
 
 Server 可原生跑 HTTPS/WSS。准备好证书后:
 
@@ -229,7 +261,7 @@ Server 可原生跑 HTTPS/WSS。准备好证书后:
 
 ---
 
-## 8. 在机器上安装 Agent
+## 9. 在机器上安装 Agent
 
 Agent 装在**每一台你想监控的机器**上:Server 这台、另一台服务器、家里的 NAS、
 办公室的 Windows 电脑。它指向 Server 的**对外可达地址**,不需要任何入站端口。前提:
@@ -298,7 +330,7 @@ docker compose down                              # 卸载(加 -v 连身份一起
 **Docker 安装默认监控宿主机**:在 Linux 宿主机上,`--docker` 生成的 compose 会带上
 `network_mode: host`、`pid: host`、`user: "0:0"`、`cap_add: [NET_RAW]`,并把宿主机
 `/proc`、`/sys` 只读挂进去,所以采到的是这台机器而不是容器自己。要改成监控容器本身,
-加 `--container-view`。两者的差别见[第 9 节](#_9-宿主机视角与容器视角-docker-安装)。
+加 `--container-view`。两者的差别见[第 10 节](#_10-宿主机视角与容器视角-docker-安装)。
 
 **裸二进制(Windows / Linux)**:从下载中心获取对应平台的最新版,也可在
 [下载中心首页](https://d.nettact.org) 选择历史版本:
@@ -322,7 +354,7 @@ enroll_token: "<一次性令牌>"
 
 ---
 
-## 9. 宿主机视角与容器视角(Docker 安装)
+## 10. 宿主机视角与容器视角(Docker 安装)
 
 一个跑在容器里的 Agent,默认看到的是**容器自己**的网卡、进程和文件系统。那几乎不是
 你想监控的东西,所以 `--docker` 默认给宿主机视角,四件事一起上——只开其中几项会采出
@@ -351,7 +383,7 @@ enroll_token: "<一次性令牌>"
 
 ---
 
-## 10. 故障排查
+## 11. 故障排查
 
 - **Agent 装完没出现在控制台 / 容器反复重启**:安装脚本本身会等注册成功并验证进程
   稳定,失败时会打印 Agent 日志、删掉容器并直接告诉你原因。事后排查:
@@ -359,10 +391,10 @@ enroll_token: "<一次性令牌>"
   或被用过——到控制台重新签发一枚,重跑安装命令即可。
 - **报 `NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**:令牌文件对
   容器里的非 root 用户不可读。`chmod 644 ~/nettact-agent/enroll.token && chmod 700 ~/nettact-agent`
-  (原因见第 8 节),下次重启即可读到;令牌没过期就不用重新签发。
+  (原因见第 9 节),下次重启即可读到;令牌没过期就不用重新签发。
 - **ICMP 探测 / 网关探测显示"受阻"**:容器视角下多半是 ping socket 没打开。
   `docker exec nettact-agent cat /proc/sys/net/ipv4/ping_group_range` 若是 `1 0`,
-  说明 compose 里缺 `sysctls` 那一段(见[第 9 节](#_9-宿主机视角与容器视角-docker-安装));
+  说明 compose 里缺 `sysctls` 那一段(见[第 10 节](#_10-宿主机视角与容器视角-docker-安装));
   路径诊断则本来就需要宿主机视角。详见[权限参考](./permissions.md)。
 - **登录后立刻掉登录**:见第 2 节[关于 HTTPS 与会话 Cookie](#关于-https-与会话-cookie),
   改用 HTTPS 或反代(并设 `NETTACT_SECURE_COOKIE=true`)。
