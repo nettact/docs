@@ -188,13 +188,13 @@ servers:
 | 权限族 | Windows | Linux | macOS | Docker |
 |---|---|---|---|---|
 | DNS / HTTP / TCP / NAT 探测 | ✅ | ✅ | ✅ | ✅ |
-| ICMP 探测、网关探测 | ✅ | ✅ | ❌ | ✅ |
+| ICMP 探测、网关探测 | ✅ | ✅ | ✅ | ✅ |
 | 网卡状态 / 地址、Wi-Fi | ✅ | ✅ | ✅ | ✅ |
-| 邻居(设备发现) | ✅ | ✅ | ❌ | ✅ |
+| 邻居(设备发现) | ✅ | ✅ | ✅ | ✅ |
 | 主机指标 `host.*` | ✅ | ✅ | ✅ | ✅ |
 | 进程 / 连接快照 | ✅ | ✅ | ✅ | ✅ |
-| ICMP 路径诊断 | ✅ | 🔑 | ❌ | 🔑 |
-| TCP 路径诊断 | 🔑 | 🔑 | ❌ | 🔑 |
+| ICMP 路径诊断 | ✅ | 🔑 | 🔑 | 🔑 |
+| TCP 路径诊断 | 🔑 | 🔑 | 🔑 | 🔑 |
 
 关于 🔑:
 
@@ -234,7 +234,11 @@ docker exec <容器> cat /proc/sys/net/ipv4/ping_group_range   # 期望 0	214748
   宿主机视角用 `--user 0:0 --cap-add NET_RAW` 拿到 raw,**这一步只为路径诊断**;
   容器视角(`--container-view`)保持非 root,没有路径诊断,ICMP 探测与网关探测则
   依赖上面那句 `ping_group_range` sysctl。
-- **macOS**:❌ 的几项在 macOS 构建里尚未实现,授权和提权都无法启用。
+- **macOS**:ICMP 探测与网关探测**任意用户可用**——macOS 的 datagram ICMP socket
+  没有 `ping_group_range` 这类开关,不存在被关掉的路径。邻居发现走 `sysctl` 读路由表
+  (与 `arp -an` / `ndp -an` 同源),同样无需提权。两种路径诊断都需要 raw ICMP
+  socket,即**以 root 运行 Agent**(`sudo` 或 LaunchDaemon)。主机温度仍未实现
+  (`host.temperature.read` ❌)。
 
 ### Docker 的另一件事:采的是谁
 
@@ -253,12 +257,13 @@ docker exec <容器> cat /proc/sys/net/ipv4/ping_group_range   # 期望 0	214748
 
 #### probe.icmp {#probe-icmp}
 
-用 ICMP(ping)探测目标的可达性与延迟。Windows ✅ / Linux ✅ / macOS ❌。
+用 ICMP(ping)探测目标的可达性与延迟。Windows ✅ / Linux ✅ / macOS ✅。
 
 Linux 上**不一定需要提权**:走无特权 ping socket 即可,前提是
 `net.ipv4.ping_group_range` 覆盖当前进程的 gid——裸机上多数发行版默认如此,
 **容器里默认相反**(`1 0`,需要 `--sysctl` 打开)。该 sysctl 关闭且进程又无
-`CAP_NET_RAW` 时不可用。
+`CAP_NET_RAW` 时不可用。**macOS 上永远不需要提权**:datagram ICMP socket 对
+任意用户开放。
 
 #### probe.dns {#probe-dns}
 
@@ -294,7 +299,8 @@ Linux 上**不一定需要提权**:走无特权 ping socket 即可,前提是
 #### network.gateway.probe {#network-gateway-probe}
 
 发现默认网关并对其做 ICMP 探测,用于区分"本地网络断了"和"上游断了"。
-可用性与 [probe.icmp](#probe-icmp) 完全一致:Windows ✅ / Linux ✅(无需提权)/ macOS ❌。
+可用性与 [probe.icmp](#probe-icmp) 完全一致:Windows ✅ / Linux ✅(无需提权)/
+macOS ✅(无需提权)。
 
 #### network.interface.status.read {#network-interface-status-read}
 
@@ -305,13 +311,16 @@ Linux 上**不一定需要提权**:走无特权 ping socket 即可,前提是
 
 读取网卡的 IP 地址、默认网关地址与配置的 DNS 服务器。
 
-**依赖:** `network.interface.status.read`。IP 地址全平台可用;**网关与 DNS 仅
-Windows 与 Linux**——macOS 构建没有路由/resolver 适配,这两个字段在 macOS 上始终为空。
+**依赖:** `network.interface.status.read`。全平台可用,网关与 DNS 字段也不例外
+(Windows 读各网卡的适配器表,Linux 走 netlink,macOS 走 `PF_ROUTE` 路由 sysctl)。
 
 ::: tip
-Linux 的 DNS 配置是全局的(`/etc/resolv.conf`),不像 Windows 那样按网卡区分,
-因此 Agent 把这份全局列表归到**持有默认路由**的网卡上——包括
-`default dev tun0` 这种没有网关地址的点对点/隧道默认路由。
+Linux 与 macOS 的 DNS 配置是全局的,不像 Windows 那样按网卡区分,因此 Agent 把
+一份全局列表归到**持有默认路由**的网卡上——包括 `default dev tun0` 这种没有网关
+地址的点对点/隧道默认路由。Linux 上这份列表就是 `/etc/resolv.conf`;macOS 上
+Agent 读的也是这个文件,但它只是 `configd` 维护的**主 resolver** 镜像——在有
+scoped/split DNS 的 Mac 上(VPN 按域名分流、多网络服务),`scutil --dns` 里的
+其余 resolver 不会被 Agent 上报。这是已知局限。
 :::
 
 #### network.wifi.status.read {#network-wifi-status-read}
@@ -332,13 +341,13 @@ Linux 的 DNS 配置是全局的(`/etc/resolv.conf`),不像 Windows 那样按网
 读取系统的邻居表(ARP / NDP),被动发现局域网上的设备(IP + MAC)。不发包、不扫描,
 只读系统已有的表。
 
-Windows ✅ / Linux ✅(netlink,无需特权)/ macOS ❌。
+Windows ✅ / Linux ✅(netlink,无需特权)/ macOS ✅(路由 sysctl,无需特权)。
 
 #### network.neighbor.hostname.read {#network-neighbor-hostname-read}
 
 对发现的邻居做反向 DNS,补上主机名。
 
-**依赖:** `network.neighbor.read`。Windows ✅ / Linux ✅ / macOS ❌。
+**依赖:** `network.neighbor.read`。Windows ✅ / Linux ✅ / macOS ✅。
 
 ### 主机指标
 
@@ -402,8 +411,9 @@ Windows ✅ / Linux ✅(netlink,无需特权)/ macOS ❌。
 
 读取每个进程的磁盘 I/O。
 
-**依赖:** `host.process.basic.read`。Windows ✅ / Linux ✅ / **macOS ❌**:Agent
-会把这条列为可授予,但 macOS 上底层实现返回"未实现",授予后也拿不到 I/O 字段。
+**依赖:** `host.process.basic.read`。Windows ✅ / Linux ✅ / **macOS ❌**:macOS
+的底层实现读不到进程 I/O,因此 Agent 在 macOS 上把这条报为不支持。授予它的策略
+依然有效——只是这条授权永远不会生效,控制台把它列在「受阻」,而不是假装在采集。
 
 ### 连接快照
 
@@ -441,13 +451,15 @@ Windows ✅ / Linux ✅(netlink,无需特权)/ macOS ❌。
 
 用 ICMP 追踪到目标的网络路径,逐跳记录响应者与延迟。
 
-Windows ✅(走 iphlpapi,无需管理员)/ Linux 🔑(需 `CAP_NET_RAW` 或 root)/ macOS ❌。
+Windows ✅(走 iphlpapi,无需管理员)/ Linux 🔑(需 `CAP_NET_RAW` 或 root)/
+macOS 🔑(需 root)。
 
 #### diagnostic.traceroute.tcp {#diagnostic-traceroute-tcp}
 
 用 TCP SYN 追踪路径。对只放行特定端口、丢弃 ICMP 的路径更有效。
 
-Windows 🔑(需管理员或以 SYSTEM 运行的服务)/ Linux 🔑(需 `CAP_NET_RAW` 或 root)/ macOS ❌。
+Windows 🔑(需管理员或以 SYSTEM 运行的服务)/ Linux 🔑(需 `CAP_NET_RAW` 或 root)/
+macOS 🔑(需 root)。
 
 两种模式独立授权:一台机器可以只有其中一种可用,控制台会如实展示。
 

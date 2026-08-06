@@ -358,10 +358,13 @@ support different permissions.
   process's gid. Most distributions leave that range open on bare metal;
   **inside a container the opposite is true** (see below). Neighbour discovery
   uses netlink and needs no privilege at all.
-- **macOS (bare binary)**: standard probes (DNS/HTTP/TCP/NAT), interface and Wi-Fi
-  state, host metrics, and process/connection snapshots work; ICMP probing,
-  gateway probing, neighbour discovery and path diagnostics are **not implemented
-  yet**.
+- **macOS (bare binary)**: at parity with Linux for network capabilities. ICMP
+  probing and gateway probing work for **any user** — macOS's datagram ICMP
+  socket has no `ping_group_range`-style switch — and neighbour discovery reads
+  the routing `sysctl` unprivileged. Both path diagnostics modes need a raw
+  ICMP socket, i.e. the agent must **run as root** (the installer's LaunchDaemon
+  does; a hand-launched binary needs `sudo`). Host temperature reads are not
+  implemented, and per-process I/O counters are unavailable on macOS.
 - **Docker (official agent image)**: the image is a Linux build, so its
   capabilities match Linux — but it deliberately carries **no** `cap_net_raw`
   file capability. (With one, `--cap-drop ALL` — a common hardening default —

@@ -301,8 +301,11 @@ probe_access:
   只有裸 socket 能收),而 ICMP 探测与网关探测还有一条退路——非特权 ping socket,
   条件是内核 `net.ipv4.ping_group_range` 覆盖当前进程的 gid。多数发行版在裸机上
   默认开着这个区间,**容器里则相反**(见下)。邻居发现走 netlink,不需要任何特权。
-- **macOS(裸二进制)**:标准探测(DNS/HTTP/TCP/NAT)、网卡与 Wi-Fi 状态、主机
-  指标、进程与连接快照可用;ICMP 探测、网关探测、邻居发现与路径诊断**尚未实现**。
+- **macOS(裸二进制)**:网络能力与 Linux 对齐。ICMP 探测与网关探测**任意用户可用**
+  ——macOS 的 datagram ICMP socket 没有 `ping_group_range` 这类开关;邻居发现走
+  路由 `sysctl`,同样无需特权。两种路径诊断都需要 raw ICMP socket,即 Agent 要
+  **以 root 运行**(一键脚本装出的 LaunchDaemon 就是 root;手工运行需 `sudo`)。
+  主机温度读取未实现,进程级 I/O 计数在 macOS 上不可用。
 - **Docker(官方 Agent 镜像)**:镜像是 Linux 构建,能力同 Linux,但镜像**故意不带**
   `cap_net_raw` 文件能力(带了的话,`--cap-drop ALL` 这种常见加固会让 execve 直接
   EPERM,容器根本起不来;而且 Docker 默认 bounding set 里就有 NET_RAW,等于偷偷把

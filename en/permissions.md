@@ -211,13 +211,13 @@ target access works the other way round: an entry's `probe_access` can only
 | Permission family | Windows | Linux | macOS | Docker |
 |---|---|---|---|---|
 | DNS / HTTP / TCP / NAT probes | ✅ | ✅ | ✅ | ✅ |
-| ICMP probe, gateway probe | ✅ | ✅ | ❌ | ✅ |
+| ICMP probe, gateway probe | ✅ | ✅ | ✅ | ✅ |
 | Interface status / addresses, Wi-Fi | ✅ | ✅ | ✅ | ✅ |
-| Neighbors (device discovery) | ✅ | ✅ | ❌ | ✅ |
+| Neighbors (device discovery) | ✅ | ✅ | ✅ | ✅ |
 | Host metrics `host.*` | ✅ | ✅ | ✅ | ✅ |
 | Process / connection snapshots | ✅ | ✅ | ✅ | ✅ |
-| ICMP path diagnostics | ✅ | 🔑 | ❌ | 🔑 |
-| TCP path diagnostics | 🔑 | 🔑 | ❌ | 🔑 |
+| ICMP path diagnostics | ✅ | 🔑 | 🔑 | 🔑 |
+| TCP path diagnostics | 🔑 | 🔑 | 🔑 | 🔑 |
 
 About 🔑:
 
@@ -269,8 +269,13 @@ By platform:
   diagnostics**. The container view (`--container-view`) stays non-root and has
   no path diagnostics; its ICMP and gateway probing depend on the
   `ping_group_range` sysctl described above.
-- **macOS**: the ❌ rows are not implemented in the macOS build yet; neither
-  granting nor elevating enables them.
+- **macOS**: ICMP probing and gateway probing work for **any user** — macOS's
+  datagram ICMP socket has no `ping_group_range` analogue, so there is nothing
+  to switch off. Neighbor discovery reads the routing table via `sysctl`
+  (what `arp -an` / `ndp -an` use) and needs no privilege either. Both path
+  diagnostics modes need a raw ICMP socket, i.e. **run the Agent as root**
+  (`sudo`, or a LaunchDaemon). Host temperature stays unimplemented
+  (`host.temperature.read` ❌).
 
 ### Docker: whose machine are you monitoring?
 
@@ -291,13 +296,14 @@ Purpose, dependencies and platform availability for each one.
 
 #### probe.icmp {#probe-icmp}
 
-Probe target reachability and latency with ICMP (ping). Windows ✅ / Linux ✅ / macOS ❌.
+Probe target reachability and latency with ICMP (ping). Windows ✅ / Linux ✅ / macOS ✅.
 
 **Privilege is not always required on Linux**: an unprivileged ping socket
 suffices, as long as `net.ipv4.ping_group_range` covers the process's gid — the
 default on most distributions on bare metal, and **the opposite inside a
 container** (`1 0`, until a `--sysctl` opens it). It is unavailable when that
-sysctl is closed and the process has no `CAP_NET_RAW`.
+sysctl is closed and the process has no `CAP_NET_RAW`. **On macOS it is never
+required**: the datagram ICMP socket is open to every user.
 
 #### probe.dns {#probe-dns}
 
@@ -338,7 +344,8 @@ Discover this host's NAT behaviour and public mapping via STUN. All platforms.
 
 Discover the default gateway and probe it with ICMP, which is what separates "the
 local network is down" from "the upstream is down". Availability tracks
-[probe.icmp](#probe-icmp) exactly: Windows ✅ / Linux ✅ (no privilege) / macOS ❌.
+[probe.icmp](#probe-icmp) exactly: Windows ✅ / Linux ✅ (no privilege) / macOS ✅
+(no privilege).
 
 #### network.interface.status.read {#network-interface-status-read}
 
@@ -349,15 +356,19 @@ root dependency of almost every network capability.** All platforms.
 
 Read interface IP addresses, default gateway addresses and configured DNS servers.
 
-**Requires:** `network.interface.status.read`. IP addresses work on every
-platform; **gateways and DNS servers are Windows and Linux only** — the macOS
-build has no route/resolver adapter, so those two fields are always empty there.
+**Requires:** `network.interface.status.read`. All platforms, including the
+gateway and DNS-server fields (Windows reads its per-adapter tables, Linux uses
+netlink, macOS the `PF_ROUTE` routing sysctl).
 
 ::: tip
-Linux DNS configuration is system-wide (`/etc/resolv.conf`) rather than
-per-interface as on Windows, so the Agent attaches that one list to the
-interfaces **carrying a default route** — including a point-to-point or tunnel
-default such as `default dev tun0`, which has no gateway address at all.
+Linux and macOS DNS configuration is system-wide rather than per-interface as
+on Windows, so the Agent attaches one list to the interfaces **carrying a
+default route** — including a point-to-point or tunnel default such as
+`default dev tun0`, which has no gateway address at all. On Linux that list is
+`/etc/resolv.conf`. On macOS the Agent reads the same file, which `configd`
+maintains as a mirror of the **primary** resolver only — on a Mac with scoped
+or split DNS (VPN per-domain resolvers, multiple network services), `scutil
+--dns` shows resolvers the Agent does not report. Known limitation.
 :::
 
 #### network.wifi.status.read {#network-wifi-status-read}
@@ -382,13 +393,14 @@ Read the system neighbor table (ARP / NDP) to passively discover LAN devices
 (IP + MAC). No packets are sent and nothing is scanned — it reads a table the OS
 already keeps.
 
-Windows ✅ / Linux ✅ (netlink, no privilege needed) / macOS ❌.
+Windows ✅ / Linux ✅ (netlink, no privilege needed) / macOS ✅ (routing `sysctl`,
+no privilege needed).
 
 #### network.neighbor.hostname.read {#network-neighbor-hostname-read}
 
 Reverse-resolve discovered neighbors to add hostnames.
 
-**Requires:** `network.neighbor.read`. Windows ✅ / Linux ✅ / macOS ❌.
+**Requires:** `network.neighbor.read`. Windows ✅ / Linux ✅ / macOS ✅.
 
 ### Host metrics
 
@@ -458,8 +470,10 @@ Read per-process CPU and memory usage.
 Read per-process disk I/O.
 
 **Requires:** `host.process.basic.read`. Windows ✅ / Linux ✅ / **macOS ❌**: the
-Agent offers the permission, but the underlying macOS implementation reports "not
-implemented", so granting it yields no I/O fields.
+macOS implementation cannot read per-process I/O, so the Agent reports the
+permission as unsupported there. A policy that grants it is still valid — the
+grant just never becomes effective, and the console shows it as blocked instead
+of pretending it collects.
 
 ### Connection snapshot
 
@@ -502,7 +516,7 @@ Trace the network path to a destination with ICMP, recording the responder and
 latency at each hop.
 
 Windows ✅ (via iphlpapi, no Administrator needed) / Linux 🔑 (`CAP_NET_RAW` or
-root) / macOS ❌.
+root) / macOS 🔑 (root).
 
 #### diagnostic.traceroute.tcp {#diagnostic-traceroute-tcp}
 
@@ -510,7 +524,7 @@ Trace the path with TCP SYN probes. More effective across paths that only allow
 specific ports and drop ICMP.
 
 Windows 🔑 (Administrator, or a service running as SYSTEM) / Linux 🔑
-(`CAP_NET_RAW` or root) / macOS ❌.
+(`CAP_NET_RAW` or root) / macOS 🔑 (root).
 
 The two modes are granted independently: a machine may have only one of them, and
 the console reports that honestly.
