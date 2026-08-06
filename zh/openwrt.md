@@ -66,6 +66,10 @@ uci commit nettact
 
 其余 Agent 选项参见 [Agent 配置](/zh/agent-config);init 脚本把 UCI 选项转成对应的 `NETTACT_AGENT_*` 环境变量传给进程,并不生成 YAML 文件。如果你需要用到没有暴露在 UCI 里的选项,手写一个 `/etc/nettact/agent.yaml` 即可——Agent 会自动发现它,且文件优先级高于环境变量。
 
+::: warning 一台路由器只对应一台 Server
+LuCI 与 UCI 描述的是**单台** Server:只有一个 `server_url`、一个 `enroll_token`,没有可重复的条目。让 Agent [同时向多台 Server 上报](/zh/agent-config#同时向多台-server-上报)的 `servers:` 列表在这里**用不了**,手写进 `/etc/nettact/agent.yaml` 也不行:init 脚本始终会从 UCI 导出 `NETTACT_AGENT_SERVER_URL` 与 `NETTACT_AGENT_TLS_INSECURE`,而它们与 `servers:` 互斥,Agent 会直接启动失败而不是合并两者。按这种方式安装的路由器只向一台 Server 上报。
+:::
+
 ## 支持的架构
 
 下载脚本读取 `opkg print-architecture`(取不到时回落到 `/etc/os-release` 的 `OPENWRT_ARCH`),再映射到对应的构建:

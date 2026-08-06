@@ -99,6 +99,66 @@ The **Start at login** option starts Desktop silently with the operating
 system, without opening a browser during sign-in. Click the tray icon or select
 **Open console** from the menu-bar menu whenever you want to reopen it.
 
+## Connect to other servers
+
+The bundled agent always reports to the NetTact server running inside Desktop
+itself. It can report to another NetTact server at the same time — a family
+member's, or the one at work — and you choose separately what each of them is
+allowed to collect. Everything is done in the console; there is no configuration
+file to edit.
+
+Open the console, go to **Settings**, and find the **Connect to other servers**
+panel:
+
+1. In the other server's console, open its **Agent** page and generate a one-time
+   enrollment token.
+2. Back in Desktop, choose **Add a server**. Fill in the **Server address** — the
+   address you open that console at, including the port — and paste the
+   **Enrollment token**. **Display name** is optional: left empty, the name is
+   derived from the address's **host name alone**, lower-cased, with everything
+   that is not a letter, digit, `-` or `_` folded to `-`. The scheme and the port
+   are dropped, so `https://work.example:12450` becomes `work-example`, and
+   `http://192.168.1.10:12450` becomes `192-168-1-10`. Type a name if you would
+   rather see something else.
+3. Under **What this server may collect**, pick a preset, or switch to the custom
+   list and select individual permissions. The choice applies to that server
+   alone: the one at work can be limited to reachability checks while the one at
+   home also reads this computer's CPU and memory.
+4. Save. This computer then appears in that server's console as well, alongside
+   the monitoring you already see locally.
+
+Each entry shows its connection state, what it is allowed to collect, and the
+identity this computer was given on that server. Two actions are available per
+entry: **Change what it collects** and **Remove**. Removing an entry stops this
+computer reporting to that server; the history already sent stays there, and
+adding the server back later needs a new enrollment token.
+
+Worth knowing:
+
+- **Enrollment tokens are single-use and expire 24 hours after they are
+  created.** An entry showing **Sign-up failed** has not necessarily burnt its
+  token, though: that status covers *every* reason sign-up did not complete —
+  the server being down, no network, DNS not resolving, a certificate being
+  rejected. So read the **Last error** line on the entry first. Desktop keeps the
+  stored token and retries on its own, waiting 5 seconds after the first failure
+  and doubling up to 5 minutes between attempts, so anything transient recovers
+  by itself once the server is reachable again — there is nothing to do but
+  wait. Only when the error says the token itself was refused (already used, or
+  expired) is re-creating the entry the fix, and because a token is never
+  displayed again once saved, that means removing the entry, generating a fresh
+  token on that server, and adding it again.
+- **Desktop's own server is not in the list**, and cannot be removed or
+  restricted. It keeps full access to this computer, which is the point of the
+  all-in-one edition.
+- **Frame-rate and game capture belong to the local server only.** Adding another
+  server never reports what you play to it.
+- **Skip certificate checking** is for a server using a self-signed certificate on
+  your own network. It makes the connection possible to intercept, so leave it
+  off otherwise.
+- The servers are independent. One of them being unreachable, or removing this
+  computer from its own console, leaves the others — and your local monitoring —
+  running normally.
+
 ## Data location and removal
 
 Desktop stores its database, agent identity, send buffer, and logs under:

@@ -50,7 +50,7 @@ Compose 部署时不直接写 flag,而是在 `.env` 里设变量,由 `docker-com
 
 数据库路径、TLS 等其余 flag 在 `docker-compose.yml` 的 `command:` 里
 按需直接增删(TLS 的注释行已备好,同时要换 https 版 healthcheck,见
-[部署篇](./deploy.md#_7-启用-https-可选))。
+[部署篇](./deploy.md#_8-启用-https-可选))。
 
 ---
 

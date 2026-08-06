@@ -105,7 +105,7 @@ docker compose logs server            # 找到 "NetTact first run" 区块里的 
 到这里 Server 就绪,但**还没有任何机器被监控**——下一步是在控制台「Agent」页签发
 一次性注册令牌,再照[第 9 节](#_9-在机器上安装-agent)把 Agent 装到目标机器上。
 
-注册令牌默认 60 分钟内有效、仅可使用一次;注册成功后 Agent 把凭据保存在自己的
+注册令牌 24 小时内有效、仅可使用一次;注册成功后 Agent 把凭据保存在自己的
 数据卷里,之后重启不再需要令牌。细节见 [Agent 配置 — 注册流程](./agent-config.md#注册流程与令牌时效)。
 
 ### 关于 HTTPS 与会话 Cookie
@@ -352,6 +352,86 @@ enroll_token: "<一次性令牌>"
 注册成功后令牌即失效,可从配置文件中删除。全部配置项(数据目录、权限策略、
 探测目标访问控制等)见 [Agent 配置](./agent-config.md)。
 
+一台机器也可以**同时向多台 Server 上报**,每台各用一枚注册令牌、各持一份权限授权——
+把 `server_url` 换成 `servers:` 列表即可,写法见
+[同时向多台 Server 上报](./agent-config.md#同时向多台-server-上报)。上面几种装法装出来的
+都是单 Server,但加第二台的改法各不相同:
+
+- **原生安装**(不带 `--docker` 的 `install.sh`):改脚本写下的那份配置文件——Linux 在
+  `/etc/nettact/agent.yaml`,macOS 在 `/Library/Application Support/NetTact/agent.yaml`——
+  把其中的 `server_url:` 与 `enroll_token_file:` 换成 `servers:` 列表,再重启服务。
+- **裸二进制**:同样是改上面那份 YAML。
+- **Docker**:生成的部署根本没有挂配置文件,而它设的那两个环境变量与 `servers:` 列表互斥,
+  得改 compose——见[给 Docker 部署添加第二台 Server](#给-docker-部署添加第二台-server)。
+
+### 给 Docker 部署添加第二台 Server
+
+生成的部署里没有 YAML 配置文件:Server 地址和令牌是以 `NETTACT_AGENT_SERVER_URL`、
+`NETTACT_AGENT_ENROLL_TOKEN_FILE` 两个环境变量的形式,写在 compose 的 `environment:`
+里送进去的。这两个变量与 `servers:`
+[互斥](./agent-config.md#与单-server-写法互斥),**以环境变量形式出现同样互斥**——
+一边挂配置文件写列表、一边留着它们,不是合并,而是启动直接报错:
+
+```
+`servers:` and NETTACT_AGENT_SERVER_URL are mutually exclusive; put the setting inside the servers entry
+```
+
+所以加第二台得动 `~/nettact-agent` 里的 `docker-compose.yml` 本身:
+
+1. 写一份 `~/nettact-agent/agent.yaml`,一台 Server 一条。第一条的 `name` 就叫
+   `default`——单 Server 写法用的正是这个名字,沿用它,已经拿到的凭据和积压的发送队列
+   就都还在,不会重新注册:
+
+   ```yaml
+   servers:
+     - name: default
+       url: http://<第一台 server 主机>:12450
+       enroll_token_file: /run/secrets/agent_enroll_token
+     - name: work
+       url: https://nettact.corp.example:12450
+       enroll_token_file: /run/secrets/work_enroll_token
+       permissions:            # 这台 Server 只拿到这些
+         - probe.icmp
+         - probe.dns
+   ```
+
+2. 把第二台的一次性令牌写进 `~/nettact-agent/work.token`。两个新文件都要 `chmod 644`,
+   道理和 `enroll.token` 是 `0644` 一样:容器以非 root 用户读它们,保密性靠的是 `0700`
+   的目录本身。
+
+3. 改 `docker-compose.yml`,从 agent 服务的 `environment:` 里**删掉**这两行……
+
+   ```yaml
+         NETTACT_AGENT_SERVER_URL: ${NETTACT_AGENT_SERVER_URL}
+         NETTACT_AGENT_ENROLL_TOKEN_FILE: /run/secrets/agent_enroll_token
+   ```
+
+   ……再把两个文件加进该服务的 `volumes:`,与原有的挂载并列:
+
+   ```yaml
+         - ./agent.yaml:/etc/nettact/agent.yaml:ro
+         - ./work.token:/run/secrets/work_enroll_token:ro
+   ```
+
+   `environment:` 里其余的都保持原样。与列表冲突的只有那四个属于单台 Server 的设置
+   (`server_url`、`enroll_token`、`enroll_token_file`、`tls_insecure`)——
+   `NETTACT_AGENT_DATA_DIR` 不受影响;如果当初 `--permissions` 写下了
+   `NETTACT_AGENT_PERMISSIONS`,它也照常生效,作为「条目自己没写 `permissions`」时的
+   默认授权。
+
+4. `docker compose up -d`。`/etc/nettact/agent.yaml` 本身就在 Agent 的配置自动发现路径里,
+   不必再加变量;启动日志里的 `using config file /etc/nettact/agent.yaml` 就是它被读到的
+   凭证。
+
+`.env` 里那行 `NETTACT_AGENT_SERVER_URL` 在 `environment:` 中引用它的那行删掉之后就失效了:
+compose 读 `.env` 只是为了展开 compose 文件里的 `${...}`,而生成的这份文件并没有
+`env_file:`。
+
+> **改完之后不要再跑一遍安装脚本。** 完整跑一次 `install.sh --docker` 会重新生成
+> `docker-compose.yml`(你的改动就没了),并且顺手删掉 `nettact-agent-data` 卷——于是
+> Agent 会拿着早已用掉的令牌,向每一台 Server 重新注册。从此以后请改这几个文件再
+> `docker compose up -d`,生成文件开头的注释说的就是这件事。
+
 ---
 
 ## 10. 宿主机视角与容器视角(Docker 安装)
@@ -387,7 +467,7 @@ enroll_token: "<一次性令牌>"
 
 - **Agent 装完没出现在控制台 / 容器反复重启**:安装脚本本身会等注册成功并验证进程
   稳定,失败时会打印 Agent 日志、删掉容器并直接告诉你原因。事后排查:
-  `cd ~/nettact-agent && docker compose logs -f`。最常见的是令牌过期(默认 60 分钟)
+  `cd ~/nettact-agent && docker compose logs -f`。最常见的是令牌过期(24 小时)
   或被用过——到控制台重新签发一枚,重跑安装命令即可。
 - **报 `NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**:令牌文件对
   容器里的非 root 用户不可读。`chmod 644 ~/nettact-agent/enroll.token && chmod 700 ~/nettact-agent`

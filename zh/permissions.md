@@ -1,8 +1,13 @@
 # 权限参考
 
 Agent 能采集什么、能跑哪类探测,由**本地权限策略**决定。策略只能在 Agent 所在的
-机器上设置——控制台看得到、但改不了,这是刻意的安全边界:拿下控制台不等于能扩大
-任何一台 Agent 的采集范围。
+机器上设置——它上报的那些 Server 的控制台看得到、但改不了,这是刻意的安全边界:
+拿下控制台不等于能扩大任何一台 Agent 的采集范围。
+
+如果一台 Agent [同时向多台 Server 上报](./agent-config.md#同时向多台-server-上报),
+那么它**每台 Server 各持一份授权**:同一台机器可以让家里的 Server 读 CPU 与进程,
+只允许公司的 Server 做基础探测。本页的一切因此是按 Server 分别成立的,而不是全局
+只有一份。
 
 本页是完整的权限清单与设置方法。配置项本身的语法见
 [Agent 配置](./agent-config.md)。
@@ -151,8 +156,30 @@ Environment=NETTACT_AGENT_PERMISSIONS=probe.icmp,probe.dns,host.cpu.read
 
 ### Desktop
 
-Desktop 版内嵌的 Agent 固定为完全授权(desktop full access),不需要也无法配置权限——
-它监控的就是你自己这台电脑。
+Desktop 版内嵌的 Agent 对 Desktop 自身那台内置 Server 固定为完全授权(desktop full
+access),不需要也无法配置——它监控的就是你自己这台电脑。而这台 Agent 额外连接的
+**其它** Server,每台各有一份单独授权,在控制台的"连接到其他服务器"面板里选,见
+[NetTact Desktop](./desktop.md#连接到其他服务器)。
+
+### 按 Server 分别设置
+
+用 `servers:` 列表配置的 Agent,可以在任一条目里写 `permissions`,它只替换该条目那台
+Server 的授权:
+
+```yaml
+servers:
+  - name: home
+    url: http://192.168.1.10:12450     # 继承顶层的 permissions
+  - name: work
+    url: https://nettact.corp.example:12450
+    permissions:                       # 这台 Server 就只有这些
+      - probe.icmp
+      - probe.dns
+```
+
+整体替换的语义不变,只是改成逐条目生效。探测目标访问控制则相反:条目里的
+`probe_access` 只能在机器级策略上**收紧**,不能放宽。详见
+[同时向多台 Server 上报](./agent-config.md#同时向多台-server-上报)。
 
 ## 平台支持总表
 

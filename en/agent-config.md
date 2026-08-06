@@ -29,7 +29,9 @@ enroll_token_file: /run/secrets/agent_enroll_token   # for the first run; or inl
 ```
 
 The full annotated template is [`agent.example.yaml`](https://github.com/nettact/agent/blob/main/agent.example.yaml)
-in the agent repository.
+in the agent repository. One agent can also report to **several servers at
+once**, each with its own permission grant — see
+[Reporting to more than one server](#reporting-to-more-than-one-server).
 
 ### How the config file is located (first hit wins)
 
@@ -67,10 +69,10 @@ values, defaults and ranges.
 
 | YAML key | Environment variable | Default | Description |
 |---|---|---|---|
-| `server_url` | `NETTACT_AGENT_SERVER_URL` | — (**required**) | Server base URL, `http(s)://host:port`, e.g. `http://host:12450`. |
-| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | The agent's state directory: identity key `agent.key`, enrollment credentials `agent.json`, and the send buffer in `wal/`. Backing up or migrating an agent means backing up this directory. |
+| `server_url` | `NETTACT_AGENT_SERVER_URL` | — (**required**) | Server base URL, `http(s)://host:port`, e.g. `http://host:12450`. Required unless a [`servers:`](#reporting-to-more-than-one-server) list is used instead. |
+| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | The agent's state directory: identity key `agent.key`, enrollment credentials `agent.json` (one entry per server), and the send buffer in `wal/`. Backing up or migrating an agent means backing up this directory. |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | Skip TLS certificate verification — only for a self-signed server on your own LAN. |
-| `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `5s` | Upload cadence: how often buffered telemetry is uploaded in a batch. |
+| `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `30s` | Upload cadence: how often buffered telemetry is uploaded in a batch. Lower values make dashboards fresher at the cost of roughly linearly more server disk writes. |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | Telemetry wire format: `protobuf` or `json`. |
 
 ### Enrollment (first run; the two options are mutually exclusive)
@@ -108,13 +110,117 @@ See [Probe target access control](#probe-target-access-control-1) for details.
 
 ---
 
+## Reporting to more than one server
+
+One agent can report to several servers at the same time — a home server and an
+employer's, say — and **each of them gets its own permission grant**. Replace
+`server_url` with a `servers:` list:
+
+```yaml
+servers:
+  - name: home
+    url: http://192.168.1.10:12450
+    enroll_token_file: /run/secrets/home_enroll_token
+  - name: work
+    url: https://nettact.corp.example:12450
+    enroll_token_file: /run/secrets/work_enroll_token
+    permissions:            # this server gets these and nothing else
+      - probe.icmp
+      - probe.dns
+```
+
+`servers:` is the one setting that exists **only in the config file**. Every
+other option is one key, one environment variable, one string; a list of records
+does not fit that model, so there is no `NETTACT_AGENT_SERVERS`.
+
+### Entry options
+
+| Key | Default | Description |
+|---|---|---|
+| `name` | — (**required**) | A unique label for this server, at most 64 characters of lowercase letters, digits, `-` and `_`. See [Names are identity](#names-are-identity). |
+| `url` | — (**required**) | That server's base URL, `http(s)://host:port`. |
+| `enroll_token` | empty | The one-time enrollment token **for this server**, inline. |
+| `enroll_token_file` | empty | Path to a file holding it (**recommended**). Mutually exclusive with `enroll_token` inside the same entry. |
+| `tls_insecure` | `false` | Skip TLS certificate verification for this server only. |
+| `permissions` | the top-level `permissions` | **Replaces** the top-level grant for this server. Same syntax and the same wholesale-replacement rule; `none` grants nothing. |
+| `probe_access` | the top-level `probe_access` | **Narrows** the top-level policy for this server. Same syntax; it can never widen it. |
+
+Each server enrolls this machine separately, so each entry needs its own token,
+issued on that server's own console.
+
+### `servers:` replaces the single-server keys
+
+`servers:` is mutually exclusive with `server_url`, `enroll_token`,
+`enroll_token_file` and `tls_insecure` — including when those arrive as
+environment variables rather than from the file. Setting both is a **startup
+error**, not a merge:
+
+```
+`servers:` and NETTACT_AGENT_SERVER_URL are mutually exclusive; put the setting inside the servers entry
+```
+
+The order of the list is meaningful (see below) and a mixed configuration has no
+obvious first entry, so the agent refuses rather than guessing. Everything else —
+`data_dir`, `upload_interval`, `wire_format`, the stability limits — stays at the
+top level and applies to the whole agent.
+
+The single-server form is exactly equivalent to **one entry named `default`**.
+Spelling it out as a one-element list therefore changes nothing on an
+already-enrolled agent, and is the lossless way to make room for a second server
+later:
+
+```yaml
+servers:
+  - name: default            # same name the single-server form uses
+    url: http://<server host>:12450
+```
+
+### Names are identity
+
+`name` is not cosmetic. It keys the credential stored in `agent.json` and the
+agent's queued backlog for that server, and it is deliberately **not** derived
+from the URL — a URL is something you edit (a new port, a hostname replacing an
+IP), and an edit must not look like a different machine.
+
+The consequence: **renaming an entry makes the agent enroll again** as a new agent
+on that server, and discards whatever that server's queue still held. Changing an
+entry's `url` while keeping its `name` is the safe way to move a server.
+
+### The first entry owns game capture
+
+Frame-rate and game telemetry come from a single sensor child process, and its
+capture list is pushed down by a server, so two servers pushing different lists
+would restart it against each other. Ownership is therefore assigned rather than
+shared: **the first entry in the list** configures the sensor and receives its
+data. Every other entry's game configuration is ignored and no game data is ever
+queued for it — adding an employer's server does not start reporting what you
+play. Everything else (probes, host metrics, incident diagnostics) is collected
+for every server that was granted it.
+
+### The servers do not affect each other
+
+Each entry has its own credential, its own set of monitoring targets pushed down
+by that server, and its own upload queue. One server being unreachable, revoking
+this agent, or having its session replaced by another agent leaves the others
+reporting normally; the failed one retries on its own.
+
+Their targets are executed independently, so two servers watching the same
+address probe it twice. What they do share is the machine: one identity key
+(`agent.key`), one `data_dir`, one upload cadence, one set of
+[stability limits](#stability-limits) (two servers asking for traceroutes draw on
+the same concurrency budget), and the top-level
+[probe target access policy](#probe-target-access-control-1), which is the floor
+none of them can get past.
+
+---
+
 ## Enrollment flow and token lifetime
 
 Trust between an agent and the server is established exactly once:
 
 1. an administrator issues a **one-time enrollment token** on the console's
-   "**Agent**" page (with an optional note and lifetime, **60 minutes** by
-   default);
+   "**Agent**" page (with an optional note; tokens issued from the console are
+   valid for **24 hours**);
 2. on its first start, the agent presents the token to the server's enrollment
    endpoint and exchanges it for long-lived credentials, which are stored in
    `data_dir` alongside the machine's ed25519 identity key (`agent.json` /
@@ -125,7 +231,9 @@ Trust between an agent and the server is established exactly once:
 
 Key points:
 
-- One token enrolls exactly **one** agent; issue a separate token per machine.
+- One token enrolls exactly **one** agent on **one** server; issue a separate
+  token per machine, and a separate one per server when an agent reports to
+  several.
 - An expired or already-used token shows up as the agent failing to enroll and
   retrying in a loop — issue a new one, update the config, and restart.
 - Prefer `enroll_token_file` (a mounted file/secret) so the token never enters
@@ -151,6 +259,11 @@ requires a restart.
 - **`permissions: none`**: grant nothing, keeping only the minimum needed to stay
   running.
 - **Wildcards are never supported** (`*` / `all` are rejected).
+- **One grant per server.** An agent reporting to several servers can give each
+  of them a different one — see
+  [Reporting to more than one server](#reporting-to-more-than-one-server). The
+  top-level `permissions` is then the default an entry inherits when it does not
+  name its own.
 
 The built-in default set (standard probes plus basic network-state reads):
 
@@ -214,6 +327,11 @@ probe_access:
     - cidr:10.10.0.0/16
 ```
 
+Unlike `permissions`, this policy is the **machine owner's floor**: an agent
+reporting to several servers may hand any one of them a
+[narrower `probe_access`](#reporting-to-more-than-one-server), but never a wider
+one — a target has to pass both layers.
+
 ---
 
 ## Per-platform capabilities
@@ -263,7 +381,7 @@ support different permissions.
   compose file. **That line is required**: a new network namespace starts at
   `1 0` (an empty range) and dockerd does not change it, so the bare-metal
   assumption that "an ordinary user can ping" does not hold in a container. See
-  [the deployment guide](./deploy.md#_9-host-view-vs-container-view-docker-installs).
+  [the deployment guide](./deploy.md#_10-host-view-vs-container-view-docker-installs).
 
 For the per-permission breakdown, see the
 [permission reference](./permissions.md#platform-support).

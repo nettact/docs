@@ -24,6 +24,8 @@ enroll_token_file: /run/secrets/agent_enroll_token   # 首次运行用;或 enrol
 ```
 
 完整的带注释模板见 agent 仓库中的 [`agent.example.yaml`](https://github.com/nettact/agent/blob/main/agent.example.yaml)。
+一个 Agent 也可以**同时向多台 Server 上报**,并给每台单独授权,见
+[同时向多台 Server 上报](#同时向多台-server-上报)。
 
 ### 配置文件的定位顺序(命中即止)
 
@@ -53,10 +55,10 @@ YAML 键与环境变量一一对应,取值、默认与范围完全相同。
 
 | YAML 键 | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
-| `server_url` | `NETTACT_AGENT_SERVER_URL` | —(**必填**) | Server 基址,`http(s)://主机:端口`,如 `http://host:12450`。 |
-| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | Agent 状态目录:身份密钥 `agent.key`、注册凭据 `agent.json`、发送缓冲目录 `wal/`。备份/迁移 Agent 就是备份这个目录。 |
+| `server_url` | `NETTACT_AGENT_SERVER_URL` | —(**必填**) | Server 基址,`http(s)://主机:端口`,如 `http://host:12450`。改用 [`servers:`](#同时向多台-server-上报) 列表时不需要它。 |
+| `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | Agent 状态目录:身份密钥 `agent.key`、注册凭据 `agent.json`(每台 Server 一份)、发送缓冲目录 `wal/`。备份/迁移 Agent 就是备份这个目录。 |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | 跳过 TLS 证书校验——仅限局域网自签名 Server。 |
-| `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `5s` | 上传节奏:缓冲的遥测多久批量上传一次。 |
+| `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `30s` | 上传节奏:缓冲的遥测多久批量上传一次。调小会让面板更新更及时,代价是 Server 侧磁盘写入大致线性增加。 |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | 遥测线格式:`protobuf` 或 `json`。 |
 
 ### 注册(首次运行,二选一、互斥)
@@ -94,12 +96,103 @@ YAML 键与环境变量一一对应,取值、默认与范围完全相同。
 
 ---
 
+## 同时向多台 Server 上报
+
+一个 Agent 可以同时向多台 Server 上报——比如家里一台、公司一台——并且
+**每台 Server 各有一份权限授权**。把 `server_url` 换成 `servers:` 列表即可:
+
+```yaml
+servers:
+  - name: home
+    url: http://192.168.1.10:12450
+    enroll_token_file: /run/secrets/home_enroll_token
+  - name: work
+    url: https://nettact.corp.example:12450
+    enroll_token_file: /run/secrets/work_enroll_token
+    permissions:            # 这台 Server 就只有这两项
+      - probe.icmp
+      - probe.dns
+```
+
+`servers:` 是**唯一只存在于配置文件**的配置项。其余每一项都是"一个键 = 一个环境
+变量 = 一个字符串",而一组记录的列表放不进这个模型,所以没有
+`NETTACT_AGENT_SERVERS`。
+
+### 条目字段
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `name` | —(**必填**) | 这台 Server 的唯一标识,不超过 64 个字符,只能用小写字母、数字、`-` 和 `_`。见[名字就是身份](#名字就是身份)。 |
+| `url` | —(**必填**) | 这台 Server 的基址,`http(s)://主机:端口`。 |
+| `enroll_token` | 空 | **这台 Server** 的一次性注册令牌,内联写法。 |
+| `enroll_token_file` | 空 | 存放该令牌的文件路径(**推荐**)。同一条目内与 `enroll_token` 互斥。 |
+| `tls_insecure` | `false` | 只对这台 Server 跳过 TLS 证书校验。 |
+| `permissions` | 顶层的 `permissions` | 对这台 Server **整体替换**顶层授权。语法与整体替换语义完全相同,`none` 表示什么都不授。 |
+| `probe_access` | 顶层的 `probe_access` | 对这台 Server **收紧**顶层策略。语法相同,但只能收紧,不能放宽。 |
+
+每台 Server 都要各自完成一次注册,所以每个条目都需要一枚在对应控制台上签发的令牌。
+
+### 与单 Server 写法互斥
+
+`servers:` 与 `server_url`、`enroll_token`、`enroll_token_file`、`tls_insecure`
+互斥——包括这些值来自环境变量而不是配置文件的情况。两者同时出现是**启动失败**,
+不会合并:
+
+```
+`servers:` and NETTACT_AGENT_SERVER_URL are mutually exclusive; put the setting inside the servers entry
+```
+
+列表的顺序有含义(见下),混着写就说不清哪一条是第一条,所以 Agent 直接拒绝而不去
+猜。其余配置项——`data_dir`、`upload_interval`、`wire_format`、稳定性限额——仍然留在
+顶层,对整个 Agent 生效。
+
+单 Server 写法完全等价于**一个名为 `default` 的条目**。因此把它照抄成单元素列表,
+对已注册的 Agent 不会有任何变化,是为将来加第二台 Server 预留位置的无损写法:
+
+```yaml
+servers:
+  - name: default            # 与单 Server 写法用的名字一致
+    url: http://<server 主机>:12450
+```
+
+### 名字就是身份
+
+`name` 不是显示用的标签。它是 `agent.json` 里那份凭据的键,也是该 Server 待发送
+队列的键;它刻意**不从 URL 推导**——URL 是会被改的(换端口、把 IP 换成域名),改
+地址不该看起来像换了一台机器。
+
+由此带来的后果是:**改名会让 Agent 在那台 Server 上重新注册**成一个新 Agent,该
+Server 队列里尚未发出的数据也随之丢弃。要迁移一台 Server,正确做法是保持 `name`
+不变、只改 `url`。
+
+### 第一条拥有游戏采集
+
+帧率与游戏遥测来自唯一一个传感器子进程,而它采集哪些游戏是由 Server 下发的;两台
+Server 各下发一份就会把它来回重启。所以归属是指定的而非协商的:**列表里的第一条**
+负责配置传感器并接收其数据。其余条目下发的游戏配置一律忽略,也不会为它们排队任何
+游戏数据——加一台公司的 Server 不会顺带把你玩什么上报出去。其它数据(探测、主机
+指标、故障诊断)则会为每一台被授权的 Server 采集。
+
+### 各台 Server 互不影响
+
+每个条目都有自己的凭据、自己那台 Server 下发的监控目标、自己的发送队列。某台
+Server 不可达、把这台 Agent 吊销、或者会话被另一个 Agent 顶替,都不影响其余各台
+继续上报,出问题的那台自行重试。
+
+各台的监控目标是各自独立执行的,所以两台 Server 盯同一个地址时该地址会被探测两遍。
+真正共用的是这台机器本身:一把身份密钥(`agent.key`)、一个 `data_dir`、一份上传
+节奏、一套[稳定性限额](#稳定性限额)(两台 Server 同时要 traceroute 时用的是同一份
+并发预算),以及顶层的[探测目标访问控制](#探测目标访问控制-1)——那是谁都越不过去的
+底线。
+
+---
+
 ## 注册流程与令牌时效
 
 Agent 与 Server 的信任建立只发生一次:
 
-1. 管理员在控制台「**Agent**」页签发一枚**一次性注册令牌**(可填备注与有效期,
-   默认 **60 分钟**);
+1. 管理员在控制台「**Agent**」页签发一枚**一次性注册令牌**(可填备注;从控制台
+   签发的令牌有效期为 **24 小时**);
 2. 首次启动的 Agent 带着令牌调用 Server 的注册接口,换取长期凭据,连同本机
    ed25519 身份密钥一起存入 `data_dir`(`agent.json` / `agent.key`);
 3. 之后的每次启动都复用保存的凭据,**不再读取令牌配置**——令牌用后即焚,可以
@@ -107,7 +200,8 @@ Agent 与 Server 的信任建立只发生一次:
 
 要点:
 
-- 一枚令牌只能注册**一台** Agent;多台机器各签发一枚。
+- 一枚令牌只能在**一台** Server 上注册**一台** Agent;多台机器各签发一枚,一台
+  Agent 要上报多台 Server 时也是每台 Server 各签发一枚。
 - 令牌过期/已用的表现是 Agent 注册失败反复重试——重新签发一枚、更新配置再启动。
 - 优先用 `enroll_token_file`(文件/secret 挂载),避免令牌进入进程环境或 shell 历史;
   两个键同时设置会启动失败。
@@ -126,6 +220,9 @@ Agent 授予的范围内下发任务,权限在进程内不可变,修改需重启
   只有什么(依赖的父权限缺失时子权限自动失效)。
 - **`permissions: none`**:空授权,只保留维持运行所必需的最小功能。
 - **永不支持通配符**(`*` / `all` 会被拒绝)。
+- **每台 Server 一份授权。** 上报多台 Server 的 Agent 可以给每台不同的授权,见
+  [同时向多台 Server 上报](#同时向多台-server-上报);此时顶层的 `permissions` 是
+  条目没写自己那份时继承的默认值。
 
 内置默认集(标准探测 + 基础网络状态读取):
 
@@ -183,6 +280,10 @@ probe_access:
     - cidr:10.10.0.0/16
 ```
 
+与 `permissions` 不同,这道闸是**机器主人的底线**:上报多台 Server 的 Agent 可以给
+某一台[更窄的 `probe_access`](#同时向多台-server-上报),但永远不能更宽——目标必须
+同时通过两层。
+
 ---
 
 ## 平台能力差异
@@ -213,7 +314,7 @@ probe_access:
   ICMP 探测与网关探测仍可用,靠生成的 compose 里那句
   `sysctls: net.ipv4.ping_group_range: "0 2147483647"`。**这句必须有**:新网络命名
   空间的内核默认值是 `1 0`(空区间),dockerd 不会改它,所以容器里"普通用户能 ping"
-  这个裸机上的常识**不成立**。细节见[部署篇](./deploy.md#_9-宿主机视角与容器视角-docker-安装)。
+  这个裸机上的常识**不成立**。细节见[部署篇](./deploy.md#_10-宿主机视角与容器视角-docker-安装)。
 
 各权限逐条的平台情况见[权限参考](./permissions.md#平台支持总表)。
 

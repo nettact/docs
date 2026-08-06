@@ -66,6 +66,10 @@ uci commit nettact
 
 Every other agent option is in the [agent configuration reference](/en/agent-config). The init script passes UCI options through as the matching `NETTACT_AGENT_*` environment variables rather than generating a YAML file. If you need an option that UCI does not expose, write `/etc/nettact/agent.yaml` by hand — the agent finds it automatically, and a config file outranks the environment.
 
+::: warning One server per router
+LuCI and UCI describe a **single** server: one `server_url`, one `enroll_token`, and no repeatable entry. The `servers:` list that lets an agent [report to several servers at once](/en/agent-config#reporting-to-more-than-one-server) is **not available here**, and hand-writing one into `/etc/nettact/agent.yaml` does not work either: the init script always exports `NETTACT_AGENT_SERVER_URL` and `NETTACT_AGENT_TLS_INSECURE` from UCI, those are mutually exclusive with `servers:`, and the agent fails at startup rather than merging them. A router installed this way reports to one server.
+:::
+
 ## Supported architectures
 
 The download script reads `opkg print-architecture` (falling back to `OPENWRT_ARCH` in `/etc/os-release`) and maps it to a build:

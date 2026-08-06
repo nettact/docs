@@ -127,7 +127,7 @@ to mint a one-time enrollment token on the console's "Agent" page and install an
 agent on the machines you care about, as described in
 [section 9](#_9-installing-an-agent-on-a-machine).
 
-Enrollment tokens are valid for 60 minutes by default and can be used only
+Enrollment tokens are valid for 24 hours and can be used only
 once. After a successful enrollment the agent stores its credentials in its own
 data volume, so restarts no longer need a token. Details in
 [Agent configuration — enrollment flow](./agent-config.md#enrollment-flow-and-token-lifetime).
@@ -414,6 +414,102 @@ removed from the config file. For every configuration option (data directory,
 permission policy, probe target access control, ...) see
 [Agent configuration](./agent-config.md).
 
+One machine can also report to **several servers at once**, each with its own
+enrollment token and its own permission grant — replace `server_url` with a
+`servers:` list, as described in
+[Reporting to more than one server](./agent-config.md#reporting-to-more-than-one-server).
+Every install above starts out single-server, and how you add the second one
+depends on which one you used:
+
+- **Native install** (`install.sh` without `--docker`): edit the config file the
+  installer wrote — `/etc/nettact/agent.yaml` on Linux,
+  `/Library/Application Support/NetTact/agent.yaml` on macOS — replacing its
+  `server_url:` and `enroll_token_file:` keys with a `servers:` list, then
+  restart the service.
+- **Bare binary**: edit the YAML file shown above the same way.
+- **Docker**: the generated deployment mounts no config file, and the two
+  environment variables it does set collide with a `servers:` list. It takes a
+  compose edit — see
+  [Adding a second server to a Docker install](#adding-a-second-server-to-a-docker-install).
+
+### Adding a second server to a Docker install
+
+The generated deployment has no YAML config file: the server address and the
+token reach the agent as `NETTACT_AGENT_SERVER_URL` and
+`NETTACT_AGENT_ENROLL_TOKEN_FILE` in the compose file's `environment:` block.
+Those two are
+[mutually exclusive with `servers:`](./agent-config.md#servers-replaces-the-single-server-keys),
+**including when they arrive as environment variables** — leaving them in place
+while a mounted config file declares a list is a startup error, not a merge:
+
+```
+`servers:` and NETTACT_AGENT_SERVER_URL are mutually exclusive; put the setting inside the servers entry
+```
+
+So the second server is added by editing `docker-compose.yml` itself, in
+`~/nettact-agent`:
+
+1. Write `~/nettact-agent/agent.yaml` with one entry per server. Name the first
+   entry `default` — that is the name the single-server form uses, so the
+   credential and the queued backlog it already holds survive instead of
+   re-enrolling:
+
+   ```yaml
+   servers:
+     - name: default
+       url: http://<first server host>:12450
+       enroll_token_file: /run/secrets/agent_enroll_token
+     - name: work
+       url: https://nettact.corp.example:12450
+       enroll_token_file: /run/secrets/work_enroll_token
+       permissions:            # this server gets these and nothing else
+         - probe.icmp
+         - probe.dns
+   ```
+
+2. Put the second server's one-time token in `~/nettact-agent/work.token`.
+   Both new files want `chmod 644`, for exactly the reason `enroll.token` is
+   `0644`: the container reads them as a non-root user, and the `0700` directory
+   is what keeps them private.
+
+3. In `docker-compose.yml`, **delete** these two lines from the agent service's
+   `environment:` block …
+
+   ```yaml
+         NETTACT_AGENT_SERVER_URL: ${NETTACT_AGENT_SERVER_URL}
+         NETTACT_AGENT_ENROLL_TOKEN_FILE: /run/secrets/agent_enroll_token
+   ```
+
+   … and add the two files to that service's `volumes:`, beside the mounts that
+   are already there:
+
+   ```yaml
+         - ./agent.yaml:/etc/nettact/agent.yaml:ro
+         - ./work.token:/run/secrets/work_enroll_token:ro
+   ```
+
+   Everything else in `environment:` stays. Only the four server-scoped settings
+   (`server_url`, `enroll_token`, `enroll_token_file`, `tls_insecure`) collide
+   with a list — `NETTACT_AGENT_DATA_DIR` is unaffected, and a
+   `NETTACT_AGENT_PERMISSIONS` line, if `--permissions` put one there, keeps
+   working as the default grant for any entry that names no `permissions` of its
+   own.
+
+4. `docker compose up -d`. `/etc/nettact/agent.yaml` is one of the paths the
+   agent auto-discovers, so no extra variable is needed; the startup log line
+   `using config file /etc/nettact/agent.yaml` confirms it was picked up.
+
+The `NETTACT_AGENT_SERVER_URL` line in `.env` goes inert once the `environment:`
+entry referencing it is gone: compose reads `.env` only to expand `${...}` inside
+the compose file, and the generated file has no `env_file:`.
+
+> **Do not re-run the installer afterwards.** A full `install.sh --docker` run
+> regenerates `docker-compose.yml` from scratch — discarding these edits — and
+> removes the `nettact-agent-data` volume, so the agent would try to enroll at
+> every server again with tokens that are already spent. From here on, change the
+> deployment by editing these files and running `docker compose up -d`, which is
+> what the header comment in the generated file tells you.
+
 ---
 
 ## 10. Host view vs container view (Docker installs)
@@ -459,7 +555,7 @@ Things worth knowing:
   the installer already waits for enrollment and for the process to stay up, and
   on failure it prints the agent's log, removes the container and tells you why.
   After the fact: `cd ~/nettact-agent && docker compose logs -f`. The usual cause
-  is an expired (60 minutes by default) or already-used token — mint a fresh one
+  is an expired (24 hours) or already-used token — mint a fresh one
   in the console and re-run the install command.
 - **`NETTACT_AGENT_ENROLL_TOKEN_FILE: open ...: permission denied`**: the token
   file is not readable by the non-root user inside the container. Run

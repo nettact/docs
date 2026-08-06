@@ -56,7 +56,7 @@ The remaining flags — database path, TLS and so on — are added
 or removed directly in the `command:` block of `docker-compose.yml` (the TLS
 lines are already there, commented out; remember to switch the healthcheck to
 its https variant as well, see
-[the deployment guide](./deploy.md#_7-enabling-https-optional)).
+[the deployment guide](./deploy.md#_8-enabling-https-optional)).
 
 ---
 

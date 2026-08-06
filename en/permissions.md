@@ -2,8 +2,15 @@
 
 What an Agent may collect, and which probes it may run, is decided by its **local
 permission policy**. That policy can only be set on the machine the Agent runs on
-— the console can display it but never change it. That is a deliberate security
-boundary: compromising the console must not widen what any Agent collects.
+— the console of a server it reports to can display it but never change it. That
+is a deliberate security boundary: compromising a console must not widen what any
+Agent collects.
+
+An Agent that reports to
+[several servers](./agent-config.md#reporting-to-more-than-one-server) holds **one
+grant per server**, so the same machine can let a home server read its CPU and
+processes while allowing an employer's only basic probes. Everything on this page
+then applies per server rather than once.
 
 This page is the complete permission list and how to set it. For the syntax of
 the configuration options themselves, see [Agent configuration](./agent-config.md).
@@ -170,8 +177,32 @@ Environment=NETTACT_AGENT_PERMISSIONS=probe.icmp,probe.dns,host.cpu.read
 
 ### Desktop
 
-The Agent embedded in NetTact Desktop runs with a fixed full-access grant. There
-is nothing to configure — it monitors your own computer.
+The Agent embedded in NetTact Desktop reports to Desktop's own built-in server
+with a fixed full-access grant. There is nothing to configure there — it monitors
+your own computer. Any **other** server you connect that Agent to gets a grant of
+its own, chosen in the console's **Connect to other servers** panel; see
+[NetTact Desktop](./desktop.md#connect-to-other-servers).
+
+### Per server
+
+An Agent configured with a `servers:` list can carry a `permissions` key inside
+any entry. It replaces the top-level grant for that server alone:
+
+```yaml
+servers:
+  - name: home
+    url: http://192.168.1.10:12450     # inherits the top-level permissions
+  - name: work
+    url: https://nettact.corp.example:12450
+    permissions:                       # exactly what this server gets
+      - probe.icmp
+      - probe.dns
+```
+
+The wholesale-replacement rule is unchanged; it simply applies per entry. Probe
+target access works the other way round: an entry's `probe_access` can only
+**narrow** the machine-wide one, never widen it. See
+[Reporting to more than one server](./agent-config.md#reporting-to-more-than-one-server).
 
 ## Platform support
 
