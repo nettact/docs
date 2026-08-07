@@ -20,6 +20,8 @@
 
 两种模式下,Agent 的**身份信息始终保存在闪存**上的 `/etc/nettact/data`(`agent.key` 和 `agent.json`,合计不到 1 KB)。因此重启后路由器仍是同一个 Agent,永远不需要拿一次性令牌重新注册。
 
+从闪存切回内存时,下次启动服务或下载程序时会删除闪存上的那一份——切到内存的动机本来就是腾出 overlay 空间,留着那 11 MB 就白切了。
+
 ## 安装
 
 ```sh
@@ -53,22 +55,73 @@ uci commit nettact
 
 ### UCI 选项
 
+`config nettact 'main'` —— 全局设置:
+
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `enabled` | `0` | 总开关。必须同时设为 `1` 且填写了 `server_url`,服务才会启动。 |
+| `enabled` | `0` | 总开关。必须同时设为 `1` 且配置了服务器,服务才会启动。 |
 | `mode` | `ram` | `ram` 或 `flash`,见上文。填其他值按 `ram` 处理。 |
+| `server_mode` | `single` | `single` 使用下面四个选项;`multi` 忽略它们,改用 `config server` 区块。 |
 | `server_url` | 空 | NetTact 服务器地址,如 `https://nettact.example.com`。 |
 | `enroll_token` | 空 | 一次性注册令牌。注册成功后不再使用,可以清空。 |
+| `enroll_token_file` | 空 | 改为从文件读取令牌。与 `enroll_token` 互斥。 |
 | `tls_insecure` | `0` | 接受无法验证的服务器证书。仅用于自建 CA 或你自己控制的 IP 地址服务器。 |
 | `upload_interval` | `30s` | 遥测上报间隔。 |
+| `wire_format` | `protobuf` | `protobuf` 或 `json`。 |
+| `permission_mode` | `default` | `default`(Agent 内置授权,`recommended` 是它的别名)、`host_metrics`、`full`、`none` 或 `custom`,见下文。填了无法识别的值会直接拒绝启动,而不是回落到默认。 |
+| `permissions` | — | 权限 id 列表,在 `permission_mode` 为 `custom` 时生效。它**整体替换**默认集而不是在其上增删;缺少父权限会直接导致启动失败。 |
+| `probe_access_mode` | 未设置 | `allowlist` 或 `denylist`。未设置即保持默认:允许 `scope:lan` 与 `scope:public`,拒绝 `scope:loopback`、`scope:link-local` 与 `scope:metadata`。 |
+| `probe_allowlist` | — | 选择器列表:`scope:<loopback\|lan\|link-local\|public\|metadata\|any>`、`cidr:<前缀>`、`ip:<地址>`、`host:<名称>`。 |
+| `probe_denylist` | — | 语法同上。拒绝优先于允许。 |
+| `min_probe_interval` | `1s` | 单个监控项的执行频率下限。范围 `200ms`–`10m`。 |
+| `max_probe_concurrency` | `16` | 范围 1–256。 |
+| `snapshot_min_interval` | `3s` | 范围 `1s`–`10m`。 |
+| `snapshot_timeout` | `10s` | 范围 `1s`–`60s`。 |
+| `max_trace_concurrency` | `4` | 范围 1–64。 |
 | `download_base` | `https://d.nettact.org/agent` | 下载源,可改为本地镜像。 |
 | `version` | `latest` | `latest`,或锁定某个版本如 `v1.2.3`。 |
 
-其余 Agent 选项参见 [Agent 配置](/zh/agent-config);init 脚本把 UCI 选项转成对应的 `NETTACT_AGENT_*` 环境变量传给进程,并不生成 YAML 文件。如果你需要用到没有暴露在 UCI 里的选项,手写一个 `/etc/nettact/agent.yaml` 即可——Agent 会自动发现它,且文件优先级高于环境变量。
+几个权限预设与控制台接入 Agent 时提供的完全一致:`default` 是内置集(标准探测 + 基础网络状态),`host_metrics` 再加 CPU、内存、磁盘、负载、运行时长、网络吞吐与温度,`full` 授予全部,含进程与连接快照。完整 id 列表见 [Agent 配置](/zh/agent-config)。
 
-::: warning 一台路由器只对应一台 Server
-LuCI 与 UCI 描述的是**单台** Server:只有一个 `server_url`、一个 `enroll_token`,没有可重复的条目。让 Agent [同时向多台 Server 上报](/zh/agent-config#同时向多台-server-上报)的 `servers:` 列表在这里**用不了**,手写进 `/etc/nettact/agent.yaml` 也不行:init 脚本始终会从 UCI 导出 `NETTACT_AGENT_SERVER_URL` 与 `NETTACT_AGENT_TLS_INSECURE`,而它们与 `servers:` 互斥,Agent 会直接启动失败而不是合并两者。按这种方式安装的路由器只向一台 Server 上报。
+### 同时向多台 Server 上报
+
+把 `server_mode` 设为 `multi`,再为每台服务器添加一个可重复的 `config server` 区块。它们完全独立——各自的凭据、监控项、断线状态与权限:
+
+```sh
+uci set nettact.main.server_mode='multi'
+
+uci add nettact server
+uci set nettact.@server[-1].name='home'
+uci set nettact.@server[-1].url='https://nettact.example.com'
+uci set nettact.@server[-1].enroll_token='<一次性令牌>'
+
+uci add nettact server
+uci set nettact.@server[-1].name='work'
+uci set nettact.@server[-1].url='https://nettact.corp.example'
+uci set nettact.@server[-1].enroll_token='<一次性令牌>'
+uci set nettact.@server[-1].permission_mode='custom'
+uci add_list nettact.@server[-1].permissions='probe.icmp'
+uci add_list nettact.@server[-1].permissions='probe.dns'
+
+uci commit nettact
+/etc/init.d/nettact restart
+```
+
+每个 server 区块可用:`name`、`url`、`enroll_token`、`enroll_token_file`、`tls_insecure`、`permission_mode` + `permissions`、`probe_access_mode` + `probe_allowlist` + `probe_denylist`。
+
+::: warning name 是身份,不是备注
+`name` 是本机保存凭据和积压队列的键。**改名等于让 Agent 重新注册,并丢弃为该服务器积压的数据。** 它不能从 URL 推导——URL 本来就允许你修改。只能用小写字母、数字、`-` 和 `_`,最长 64 字符,且文件内唯一。
 :::
+
+条目内的 `permission_mode` 只替换该服务器的授权;条目内的 `probe_access_mode` 只能在全局基础上**继续收窄**——目标必须同时通过两层。
+
+### 配置文件实际在哪
+
+init 脚本会把 `/etc/config/nettact` 渲染成 `/var/etc/nettact/agent.yaml`,再让 Agent 读它。该路径在 tmpfs 上,因此注册令牌不会在闪存上留第二份,改设置也不会消耗 overlay 的擦写寿命。这个文件每次启动服务都会从 UCI 重新生成,直接编辑它没有意义。
+
+只有 `NETTACT_AGENT_DATA_DIR` 仍以环境变量传入,这样即使手写配置里没写 `data_dir`,身份信息也仍然落在闪存的正确位置。
+
+如果你需要 UCI 没有覆盖的设置,手写一个 `/etc/nettact/agent.yaml` 即可,完整 schema 见 [Agent 配置](/zh/agent-config)。该文件存在时,init 脚本会原样使用它并且不再生成任何东西,因此两者不可能对「哪份配置生效」产生分歧。LuCI 状态页会显示当前用的是哪一份。
 
 ## 支持的架构
 
@@ -123,23 +176,26 @@ opkg remove luci-app-nettact nettact-agent
 rm -rf /etc/nettact        # 连同身份信息一起删除
 ```
 
-`opkg remove` 会停掉服务并删除下载的程序,但保留 `/etc/nettact`,这样重装后不必重新注册。要彻底清除请手动删除该目录。
+`opkg remove` 会停掉服务,删除下载的程序和渲染出来的 `/var/etc/nettact/agent.yaml`,但保留 `/etc/nettact`,这样重装后不必重新注册。要彻底清除请手动删除该目录。
 
 ## 排查
 
 ```sh
 logread -e nettact              # 服务日志
 /etc/init.d/nettact status      # 是否在运行
+cat /var/etc/nettact/agent.yaml # UCI 实际渲染出来的配置
 /usr/lib/nettact/fetch.sh arch  # 本机识别出的架构
 ls -l /etc/nettact/data/        # 有 agent.json 即表示注册成功
 ```
 
 几种常见情况:
 
-- **服务启动后立刻退出。** 检查 `enabled=1` 且 `server_url` 已填。两者缺一,init 脚本会记一条日志然后正常退出。
+- **服务启动后立刻退出。** 检查 `enabled=1` 且已配置服务器。两者缺一,init 脚本会记一条日志然后正常退出。
+- **在 LuCI 里改了没生效。** 看状态页的「配置来源」一行:如果显示「手写配置」,说明 `/etc/nettact/agent.yaml` 存在并被优先使用了。删除或改名该文件即可回到 UCI。
 - **一直卡在等待。** 启动脚本会等系统时间和默认路由就绪各最多 5 分钟。没有 RTC 的路由器开机时间停在 1970 年,会让所有 TLS 证书都「尚未生效」;确认 `sysntpd` 在跑。
 - **下载失败。** 确认装了 `ca-bundle`,并且 `download_base` 可达。用 `uclient-fetch -O- <url>` 手动试一下。
 - **提示架构不支持。** 把 `opkg print-architecture` 的输出附在 issue 里。
+- **某个权限导致启动失败。** 权限不会自动补全:授予 `probe.http.extended` 却没给 `probe.http`、或授予 `host.process.owner.read` 却没给 `host.process.basic.read`,都是错误而不是警告。LuCI 的权限选择器会替你补上父权限,手改 `/etc/config/nettact` 则不会。
 
 ## 使用本地镜像
 
