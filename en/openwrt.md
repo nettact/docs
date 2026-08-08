@@ -44,6 +44,7 @@ It installs both packages, writes the settings into `/etc/config/nettact`, start
 | `--permissions <list>` | Comma-separated permission policy, or `none`. REPLACES the built-in default grant. The console generates a ready-made value. |
 | `--mode ram\|flash` | Where the agent binary lives (default `ram`), as described above. |
 | `--version <tag>` | Pin the agent binary to a release tag instead of `latest`. |
+| `--auto-update` | Check daily for a newer binary and install it. Cannot be combined with a pinned `--version`. Written on every run, so re-running without it turns automatic updates back off. See [Automatic updates](#automatic-updates). |
 | `--download-base <url>` | Where the agent **binary** is fetched from; point it at a local mirror. |
 | `--ipk-base <url\|dir>` | Where the two **packages** come from. A local directory works, which is how an unreleased build is tested. |
 | `--tls-insecure` | Accept a server certificate that does not verify. |
@@ -51,7 +52,7 @@ It installs both packages, writes the settings into `/etc/config/nettact`, start
 | `--reinstall` | Enroll again with the token given here instead of the credential this router already holds — what the console's **Reinstall** produces. The old credential and queue are discarded, and only after the configuration has been written, so a bad option or a failed UCI write leaves the router exactly as it was. |
 | `--wait <seconds>` | How long to wait for the router to come online (default 180; `0` skips the check). |
 
-Re-running it is safe. The agent's identity in `/etc/nettact/data` is never touched, so an already-enrolled router keeps its credential — and does not even need a token.
+Re-running it is safe. The agent's identity in `/etc/nettact/data` is never touched, so an already-enrolled router keeps its credential — and does not even need a token. Every run also refreshes the binary to the configured version before starting the service, which is what makes re-running it the [upgrade path](#updating-and-maintenance).
 
 ### Manual install
 
@@ -115,6 +116,7 @@ uci commit nettact
 | `max_trace_concurrency` | `4` | Range 1–64. |
 | `download_base` | `https://d.nettact.org/agent` | Download source; point at a local mirror if you prefer. |
 | `version` | `latest` | `latest`, or a pinned tag such as `v1.2.3`. |
+| `auto_update` | `0` | Check daily and install a newer agent binary, restarting the service only when the binary actually changed. Ignored while `version` is pinned. See [Automatic updates](#automatic-updates). |
 
 The permission presets match the ones the console offers when you enroll an agent: `default` is the built-in set (standard probes plus basic network state), `host_metrics` adds CPU, memory, disk, load, uptime, throughput and temperature, and `full` grants everything including process and connection snapshots. The full id list is in the [agent configuration reference](/en/agent-config).
 
@@ -191,14 +193,37 @@ Everything else is identical: ICMP, DNS, HTTP, TCP, NAT behaviour, traceroute, i
 
 ## Updating and maintenance
 
-**Update the agent binary** — press "Download / update binary" on the LuCI status page, or:
+**Update the agent binary** — re-run the one-command installer. Every run refreshes the binary to the configured version before starting the service, so re-running it is the upgrade path:
+
+```sh
+wget -O /tmp/nettact-openwrt.sh https://d.nettact.org/agent/openwrt.sh && sh /tmp/nettact-openwrt.sh \
+  --server-url 'https://your-server' --wait 180
+```
+
+An already-enrolled router keeps its credential, so no token is needed. Or, without the installer — press "Download / update binary" on the LuCI status page, or:
 
 ```sh
 /usr/lib/nettact/fetch.sh install
 /etc/init.d/nettact restart
 ```
 
-In RAM mode the binary is re-downloaded on every boot anyway, so with `version` set to `latest` a reboot is an update.
+Note what a restart alone does **not** do: the service only downloads a binary when none is present, so `/etc/init.d/nettact restart` keeps running whatever is already there. In RAM mode a *reboot* is an update (`/tmp` is empty again, and with `version` set to `latest` the fresh download resolves to the newest release); in flash mode the binary stays until something fetches a new one. A router that has been up since before a release therefore keeps running the older agent — which matters because an agent too old for its server fails to enroll and respawns every 10s. To have it keep up on its own, see automatic updates below.
+
+### Automatic updates
+
+Off by default. Once on (**Automatic updates** under LuCI Services → NetTact → Binary, or `uci set nettact.main.auto_update='1'` followed by `/etc/init.d/nettact restart`), the package writes a once-daily check into root's crontab:
+
+```
+37 3 * * * /usr/lib/nettact/update.sh # nettact-auto-update
+```
+
+- The time of day is derived from this device's MAC and always lands between **02:00 and 05:00** — it does not move on every reboot, and it does not point a fleet of routers at the download source simultaneously. Same approach as the Server's Watchtower sidecar.
+- The service is restarted only when the downloaded binary is genuinely **different** from the current one; identical content does nothing, so no connection is dropped for nothing.
+- Skipped when `version` pins a specific release — a pin means stay on that version. The installer refuses `--auto-update` together with `--version <tag>` for the same reason.
+- Does nothing while the service is manually stopped, so it will not bring an agent you just stopped back up in the middle of the night.
+- Turning it off (or disabling the service, or removing the package) removes the cron entry.
+
+To enable it at install time, add `--auto-update` to `openwrt.sh` (ticking "Automatic updates" on the console's enrollment page generates it). That switch is **written on every run of the installer**: re-running without the option turns it off, matching the other platforms.
 
 **Update the packages** — run `opkg install` against the same `.ipk` URLs again.
 

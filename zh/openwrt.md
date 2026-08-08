@@ -44,6 +44,7 @@ wget -O /tmp/nettact-openwrt.sh https://d.nettact.org/agent/openwrt.sh && sh /tm
 | `--permissions <列表>` | 逗号分隔的权限策略,或 `none`。它**替换**内置默认授权而非叠加。控制台会生成现成的值。 |
 | `--mode ram\|flash` | agent 二进制的存放位置(默认 `ram`),含义见上文。 |
 | `--version <tag>` | 把二进制固定到某个发布标签,而不是 `latest`。 |
+| `--auto-update` | 每天检查一次并自动升级二进制。不能与固定的 `--version` 同用。这个开关每次运行都会被写一遍,所以不带它重跑就等于关闭。见[自动更新](#自动更新)。 |
 | `--download-base <url>` | **二进制**的下载源,可指向本地镜像。 |
 | `--ipk-base <url\|目录>` | 两个**软件包**的来源。可以是本地目录——测试未发布的构建就靠它。 |
 | `--tls-insecure` | 接受无法验证的服务器证书。 |
@@ -51,7 +52,7 @@ wget -O /tmp/nettact-openwrt.sh https://d.nettact.org/agent/openwrt.sh && sh /tm
 | `--reinstall` | 用这里给的令牌重新注册,而不是继续用路由器已有的凭据——控制台的**重装**生成的就是它。旧凭据和队列会被丢弃,且只在配置写完之后才丢——所以参数写错或 uci 写入失败时,路由器还是原样。 |
 | `--wait <秒>` | 等待路由器上线的时长(默认 180;填 `0` 跳过检查)。 |
 
-重复执行是安全的。`/etc/nettact/data` 里的身份始终不动,所以已经注册过的路由器会保留原有凭据——甚至不需要再给令牌。
+重复执行是安全的。`/etc/nettact/data` 里的身份始终不动,所以已经注册过的路由器会保留原有凭据——甚至不需要再给令牌。每次运行还会在启动服务前把二进制刷新到配置指定的版本,这正是"重跑即[升级](#升级与维护)"的原因。
 
 ### 手动安装
 
@@ -115,6 +116,7 @@ uci commit nettact
 | `max_trace_concurrency` | `4` | 范围 1–64。 |
 | `download_base` | `https://d.nettact.org/agent` | 下载源,可改为本地镜像。 |
 | `version` | `latest` | `latest`,或锁定某个版本如 `v1.2.3`。 |
+| `auto_update` | `0` | 每天检查一次并自动升级 Agent 程序,只有二进制确实变了才重启服务。`version` 锁定了具体版本时本项无效。见[自动更新](#自动更新)。 |
 
 几个权限预设与控制台接入 Agent 时提供的完全一致:`default` 是内置集(标准探测 + 基础网络状态),`host_metrics` 再加 CPU、内存、磁盘、负载、运行时长、网络吞吐与温度,`full` 授予全部,含进程与连接快照。完整 id 列表见 [Agent 配置](/zh/agent-config)。
 
@@ -191,14 +193,37 @@ MIPS 只提供软浮点版本:MT7621 一系没有 FPU,而软浮点版本在少�
 
 ## 升级与维护
 
-**更新 Agent 程序**:在 LuCI 状态页点「下载 / 更新程序」,或
+**更新 Agent 程序**:重新跑一遍一键脚本。每次运行都会在启动服务前把程序刷新到配置指定的版本,所以重跑就是升级:
+
+```sh
+wget -O /tmp/nettact-openwrt.sh https://d.nettact.org/agent/openwrt.sh && sh /tmp/nettact-openwrt.sh \
+  --server-url 'https://你的服务器' --wait 180
+```
+
+已注册的路由器会保留原有凭据,不需要再给 token。不想用脚本的话,也可以在 LuCI 状态页点「下载 / 更新程序」,或
 
 ```sh
 /usr/lib/nettact/fetch.sh install
 /etc/init.d/nettact restart
 ```
 
-内存模式下每次开机本来就会重新下载,只要 `version` 是 `latest`,重启即是升级。
+注意光重启服务**不会**升级:服务只在程序不存在时才下载,所以 `/etc/init.d/nettact restart` 跑的还是原来那个。内存模式下*重启系统*才算升级(`/tmp` 被清空,`version` 为 `latest` 时重新下载到的就是最新版);闪存模式下程序会一直留着,直到有人显式去取新的。也就是说,一台从某次发布之前就一直开着的路由器会持续运行旧版 Agent——这件事要紧,因为对服务器来说过旧的 Agent 会注册失败,然后每 10 秒重启一次。要让它自己跟上,见下面的自动更新。
+
+### 自动更新
+
+默认关闭。打开后(LuCI「服务 → NetTact → 程序」里的**自动更新**,或 `uci set nettact.main.auto_update='1'` 再 `/etc/init.d/nettact restart`),包会往 root 的 crontab 里写一条每天一次的检查:
+
+```
+37 3 * * * /usr/lib/nettact/update.sh # nettact-auto-update
+```
+
+- 检查时刻由本机 MAC 派生,固定落在 **02:00–05:00** 之间——既不会每次重启都换时间,也不会让一批路由器同时压向下载源。这与 Server 的 Watchtower 旁车是同一套做法。
+- 只有下载到的二进制与当前的**确实不同**才重启服务;内容一样就什么都不做,不会白白断开一次连接。
+- `version` 锁定了具体版本时跳过——锁定的意思就是留在那个版本。安装脚本也因此拒绝 `--auto-update` 与 `--version <tag>` 同时使用。
+- 服务被手动 `stop` 时不动作,不会在半夜把你刚停掉的 Agent 又拉起来。
+- 关闭(或停用服务、卸载包)时这条 cron 会被一并删除。
+
+安装时就打开:给 `openwrt.sh` 加 `--auto-update`(控制台接入页面勾选「自动更新」即会生成)。这个开关**每次运行安装脚本都会被写一遍**:不带该参数重跑就等于关闭,与其他平台一致。
 
 **更新安装包本身**:重新 `opkg install` 对应的 `.ipk` URL 即可。
 
