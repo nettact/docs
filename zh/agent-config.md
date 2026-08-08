@@ -57,6 +57,7 @@ YAML 键与环境变量一一对应,取值、默认与范围完全相同。
 |---|---|---|---|
 | `server_url` | `NETTACT_AGENT_SERVER_URL` | —(**必填**) | Server 基址,`http(s)://主机:端口`,如 `http://host:12450`。改用 [`servers:`](#同时向多台-server-上报) 列表时不需要它。 |
 | `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | Agent 状态目录:身份密钥 `agent.key`、注册凭据 `agent.json`(每台 Server 一份)、发送缓冲目录 `wal/`。备份/迁移 Agent 就是备份这个目录。 |
+| `status_file` | `NETTACT_AGENT_STATUS_FILE` | 空(关闭) | 在该路径写一个 JSON 连接状态文件——按 Server 分别记录:连没连上、为什么没连上、下次何时重试、积压多少条。见[查看连接状态](#查看连接状态)。 |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | 跳过 TLS 证书校验——仅限局域网自签名 Server。 |
 | `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `30s` | 上传节奏:缓冲的遥测多久批量上传一次。调小会让面板更新更及时,代价是 Server 侧磁盘写入大致线性增加。 |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | 遥测线格式:`protobuf` 或 `json`。 |
@@ -209,6 +210,115 @@ Agent 与 Server 的信任建立只发生一次:
   Server 侧会出现一个新的 Agent 身份。
 
 ---
+
+## 查看连接状态
+
+连不上 Server 的 Agent 照样在跑、照样在重试,所以"进程活着"完全说明不了有没有
+数据在上报。有两条途径可以看到真相,它们给出的事实是同一批。
+
+### 看日志
+
+每台配置的 Server 用 `[名字]` 给自己的日志行打标签。有两行是关键:
+
+```
+[default] connected to https://nettact.example.com (agent 3f2a9c1e)
+[default] session ended (tls_cert_expired): dial: … x509: certificate has expired …; reconnecting in 32.1s (pending 247)
+```
+
+第一行表示会话已建立。第二行是每次失败尝试各一行,答案全在里面:括号里是失败的
+类别,后面是原始错误,再往后是下次重试的时间,以及这次中断背后积压了多少条。
+重连退避从 1s 指数增长到 30s 封顶,在此基础上再叠±20% 抖动(所以单次间隔最大约 36s),避免一批 Agent 在同一台 Server 掉线后齐步重试。因此一台连不上的 Server 大约每分钟两行,不会刷屏。
+
+注册阶段——Agent 还没有凭据的时候——退避更慢,并有自己的日志行:
+
+```
+[default] enrollment failed, retrying in 40s: enroll: … the token has already been used …
+```
+
+到哪里去看这些输出:
+
+| Agent 的安装方式 | 命令 |
+|---|---|
+| Linux,安装脚本(systemd) | `journalctl -u nettact-agent -f` |
+| macOS,安装脚本(launchd) | `tail -f /var/log/nettact-agent.log` |
+| Docker | `cd ~/nettact-agent && docker compose logs -f` |
+| OpenWrt | `logread -e nettact`,或者看 LuCI 状态页 |
+| Windows,计划任务 | 计划任务会丢弃输出——请改用下面的[状态文件](#状态文件),或在控制台里前台运行以实时查看 |
+| 手动运行 | 就在 stderr,在你眼前 |
+
+### 失败原因代码
+
+括号里的词是一个稳定的代码,可以直接搜索、也可以被翻译;它后面的原始错误则会
+指明是哪台主机、哪张证书。
+
+| 代码 | 发生了什么 | 通常怎么修 |
+|---|---|---|
+| `dns` | 服务器域名解析不了 | 检查主机名,以及这台机器的 DNS |
+| `refused` | 主机有响应,但那个端口没人监听 | 检查端口,以及 Server 是否在运行 |
+| `timeout` | 连接或握手超时 | 通常是防火墙在丢包而不是拒绝 |
+| `tls_cert_expired` | 服务器证书不在有效期内 | 换证书——也可能是本机时钟不对,现象一模一样 |
+| `tls_cert_untrusted` | 证书链追溯不到受信任的根 | 安装该 CA,或在自己局域网内用 `tls_insecure` |
+| `tls_hostname` | 证书有效,但签的是另一个名字 | 用证书签发的那个名字去连 |
+| `tls` | 其他 TLS 握手失败 | 确认那个端口确实在讲 TLS |
+| `auth` | Server 拒绝了 Agent 凭据(401/403) | 多半是 Agent 已在 Server 侧被删除,重新注册即可 |
+| `ack_timeout` | 会话还开着,但不再确认上传 | 通常是中间设备把一条死连接维持着 |
+| `superseded` | 另一个进程用同一份凭据连上了 | 两个 Agent 共用了一个数据目录,各给一个 |
+| `schema_mismatch` | Server 拒绝了本 Agent 的协议版本 | 升级 Agent 或 Server |
+| `revoked` | Agent 已在 Server 上被删除 | 只要有令牌可用,它会自行重新注册 |
+| `enroll_rejected` | Server 收到注册请求并明确拒绝了 | 令牌已用过或已过期,或站点 Agent 数已达上限 |
+| `local_state` | 注册交换成功了,但凭据没能写进磁盘 | 数据目录满了、只读或不可写。这枚一次性令牌已经作废,腾出空间后需用新令牌重新注册 |
+
+会话类失败会像上面那样把代码打在日志的括号里。注册与终止类代码——`no_token`、
+`enroll_rejected`、`local_state`、`stopped`——不走这条路:它们写在状态 JSON 的
+`last_error.code`(以及 OpenWrt 状态页)里,要查就查那里,而不是日志。
+| `no_token` | 既没有凭据,也没有获取凭据的途径 | 在控制台签发注册令牌并配置上 |
+| `stopped` | 这台 Server 的 runner 放弃了,原因不属于上面任何一个代码 | 看 `last_error.detail`,以及 `since` 那个时间点前后的日志 |
+| `network` | 应用层以下出了问题,且不属于上面任何一种 | 看同一行里的原始错误 |
+
+### 状态文件
+
+`status_file` 把同样的事实写成 JSON,供那些不会有人去看日志的安装场景使用。
+默认关闭;OpenWrt 安装包会替你设好,LuCI 状态页会把它渲染出来。
+
+```yaml
+status_file: /run/nettact/status.json
+```
+
+```json
+{
+  "schema": 1,
+  "pid": 4211,
+  "agent_version": "v0.5.0",
+  "started_at": 1723100000,
+  "updated_at": 1723100123,
+  "servers": [
+    {
+      "name": "default",
+      "url": "https://nettact.example.com",
+      "state": "waiting_retry",
+      "agent_id": "3f2a9c1e",
+      "since": 1723100100,
+      "last_connected_at": 1723099000,
+      "next_retry_at": 1723100155,
+      "last_error": { "code": "tls_cert_expired", "detail": "dial: … x509: certificate has expired …" },
+      "pending": 247
+    }
+  ]
+}
+```
+
+- `state` 取值为 `enrolling`、`connecting`、`connected`、`waiting_retry` 或
+  `terminal`。`terminal` 表示这台 Server 的 runner 已经放弃,不会再自行重试。
+- 时间都是 Unix 秒。`next_retry_at` 是绝对时刻,所以由它算出的倒计时,无论文件
+  多旧都仍然正确。
+- `pending` 是这台 Server 尚未发出的积压量——就是"这次中断有没有在丢数据"的那个
+  数字。
+- 它以原子替换方式写入,可以放心轮询。它在每次重连尝试时都会重写,所以在意闪存
+  寿命的设备上请把它放到内存文件系统上(`/run`、`/tmp`)。
+- Agent 正常退出时会删除它。文件还在,就说明 Agent 不是正常退出的——因此只有在
+  进程仍在运行时,才把它当作实时状态。
+
+在路由器(lite)构建上行为完全相同。
 
 ## 权限策略
 

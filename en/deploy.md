@@ -318,7 +318,10 @@ its own. Prerequisites:
 2. a one-time enrollment token minted for it on the console's "Agent" page
    (**one token per agent**).
 
-One installer covers all three shapes (native Linux / macOS, and Docker):
+One installer covers all three shapes (native Linux / macOS, and Docker). A
+**router** takes a different one — see [OpenWrt router installation](./openwrt.md),
+where the agent ships as two opkg packages that download the matching binary on
+first start, plus a LuCI page to configure it.
 
 Native Linux or macOS (a systemd / launchd service; needs root):
 
@@ -510,7 +513,36 @@ the compose file, and the generated file has no `env_file:`.
 > deployment by editing these files and running `docker compose up -d`, which is
 > what the header comment in the generated file tells you.
 
+### Checking that the agent is connected
+
+An agent that cannot reach the server keeps running and keeps retrying, so a
+service that is "active" is not evidence that anything is being reported. The
+agent says which it is on every attempt:
+
+```
+[default] connected to https://nettact.example.com (agent 3f2a9c1e)
+[default] session ended (tls_cert_expired): dial: … x509: certificate has expired …; reconnecting in 32.1s (pending 247)
+```
+
+Where to read that depends on how you installed it:
+
+```bash
+journalctl -u nettact-agent -f                        # Linux, native install
+tail -f /var/log/nettact-agent.log                    # macOS, native install
+cd ~/nettact-agent && docker compose logs -f          # Docker
+```
+
+The word in parentheses is a stable reason code — `tls_cert_expired`, `dns`,
+`refused`, `auth` and a dozen others, each with the usual fix, are tabled under
+[Watching the connection](./agent-config.md#watching-the-connection).
+
+On a Windows scheduled-task install the output is discarded, so there is nothing
+to tail. Set [`status_file`](./agent-config.md#the-status-file) instead and read
+the JSON it writes; that is also the option to use anywhere else a machine has to
+report its own state without a person watching a log.
+
 ---
+
 
 ## 10. Host view vs container view (Docker installs)
 

@@ -71,6 +71,7 @@ values, defaults and ranges.
 |---|---|---|---|
 | `server_url` | `NETTACT_AGENT_SERVER_URL` | — (**required**) | Server base URL, `http(s)://host:port`, e.g. `http://host:12450`. Required unless a [`servers:`](#reporting-to-more-than-one-server) list is used instead. |
 | `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | The agent's state directory: identity key `agent.key`, enrollment credentials `agent.json` (one entry per server), and the send buffer in `wal/`. Backing up or migrating an agent means backing up this directory. |
+| `status_file` | `NETTACT_AGENT_STATUS_FILE` | empty (off) | Write a JSON connection-status file at this path — per server: connected or not, why not, when the next attempt is due, how much is queued. See [Watching the connection](#watching-the-connection). |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | Skip TLS certificate verification — only for a self-signed server on your own LAN. |
 | `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `30s` | Upload cadence: how often buffered telemetry is uploaded in a batch. Lower values make dashboards fresher at the cost of roughly linearly more server disk writes. |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | Telemetry wire format: `protobuf` or `json`. |
@@ -243,6 +244,125 @@ Key points:
   server side.
 
 ---
+
+## Watching the connection
+
+An agent that cannot reach its server keeps running and keeps retrying, so
+"the process is up" says nothing about whether anything is being reported. There
+are two ways to see the truth, and they carry the same facts.
+
+### Reading the log
+
+Every configured server tags its own lines with `[name]`. Two lines matter:
+
+```
+[default] connected to https://nettact.example.com (agent 3f2a9c1e)
+[default] session ended (tls_cert_expired): dial: … x509: certificate has expired …; reconnecting in 32.1s (pending 247)
+```
+
+The first says a session is live. The second is one line per failed attempt, and
+carries the whole answer: the kind of failure in parentheses, the raw cause, when
+the next attempt happens, and how many entries are queued behind the outage.
+Reconnects back off exponentially from 1s to a 30s ceiling, with ±20% jitter
+applied on top (so an individual delay reaches roughly 36s) to keep a fleet that
+lost the same server from redialling in lockstep. An unreachable server
+therefore produces roughly two lines a minute rather than a flood.
+
+Enrollment — before the agent has a credential — backs off more slowly and logs
+its own line:
+
+```
+[default] enrollment failed, retrying in 40s: enroll: … the token has already been used …
+```
+
+Where to find that output:
+
+| How the agent was installed | Command |
+|---|---|
+| Linux, installer (systemd) | `journalctl -u nettact-agent -f` |
+| macOS, installer (launchd) | `tail -f /var/log/nettact-agent.log` |
+| Docker | `cd ~/nettact-agent && docker compose logs -f` |
+| OpenWrt | `logread -e nettact`, or the LuCI status page |
+| Windows, scheduled task | The task discards output — use [the status file](#the-status-file) below, or run the binary in a console to watch it live |
+| Run by hand | It is on stderr, in front of you |
+
+### Reason codes
+
+The word in parentheses is a stable code, so it can be searched for and
+translated. The raw cause after it names the host and the certificate.
+
+| Code | What happened | Usual fix |
+|---|---|---|
+| `dns` | The server name did not resolve | Check the hostname, and the machine's DNS |
+| `refused` | The host answered; nothing was listening on the port | Check the port, and that the server is running |
+| `timeout` | The dial or the handshake ran out of time | Usually a firewall dropping rather than rejecting |
+| `tls_cert_expired` | The server certificate is outside its validity window | Renew it — or fix this machine's clock, which produces the same error |
+| `tls_cert_untrusted` | The certificate chain does not reach a trusted root | Install the CA, or use `tls_insecure` on your own LAN |
+| `tls_hostname` | A valid certificate, for a different name | Connect by the name the certificate was issued for |
+| `tls` | Any other TLS handshake failure | Check that the port really speaks TLS |
+| `auth` | The server refused the agent credential (401/403) | The agent was probably deleted server-side; re-enroll |
+| `ack_timeout` | The session stayed open but stopped acknowledging uploads | Usually a middlebox holding a dead connection open |
+| `superseded` | Another process connected with this credential | Two agents share one data directory; give each its own |
+| `schema_mismatch` | The server rejected this agent's protocol version | Upgrade the agent or the server |
+| `revoked` | The agent was deleted on the server | It re-enrolls by itself if a token is available |
+| `enroll_rejected` | The server answered the enrollment and refused it | The token is spent or expired, or the site is at its agent limit |
+| `local_state` | The exchange succeeded, but the credential could not be written to disk | The data directory is full, read-only or not writable. The one-time token is already spent, so free the space and re-enroll with a new one |
+
+Session failures print their code in parentheses in the log, as above. The
+enrollment and terminal codes — `no_token`, `enroll_rejected`, `local_state`,
+`stopped` — are not written that way: they reach `last_error.code` in the status
+JSON (and the OpenWrt status page), so search there rather than in the log.
+| `no_token` | No credential, and no way to obtain one | Issue an enrollment token in the console and configure it |
+| `stopped` | That server's runner gave up for a reason none of the codes above names | Read `last_error.detail`, and the log around the time in `since` |
+| `network` | Something below the application layer failed, and matched none of the above | Read the raw cause on the same line |
+
+### The status file
+
+`status_file` writes the same facts as JSON, for the installs where nobody is
+going to read a log. It is off unless you set it; the OpenWrt package sets it for
+you and the LuCI status page renders it.
+
+```yaml
+status_file: /run/nettact/status.json
+```
+
+```json
+{
+  "schema": 1,
+  "pid": 4211,
+  "agent_version": "v0.5.0",
+  "started_at": 1723100000,
+  "updated_at": 1723100123,
+  "servers": [
+    {
+      "name": "default",
+      "url": "https://nettact.example.com",
+      "state": "waiting_retry",
+      "agent_id": "3f2a9c1e",
+      "since": 1723100100,
+      "last_connected_at": 1723099000,
+      "next_retry_at": 1723100155,
+      "last_error": { "code": "tls_cert_expired", "detail": "dial: … x509: certificate has expired …" },
+      "pending": 247
+    }
+  ]
+}
+```
+
+- `state` is one of `enrolling`, `connecting`, `connected`, `waiting_retry` or
+  `terminal`. `terminal` means that server's runner gave up and will not retry on
+  its own.
+- Times are Unix seconds. `next_retry_at` is an absolute instant, so a countdown
+  computed from it stays correct however stale the file is.
+- `pending` is that server's unsent backlog — the number that says whether an
+  outage is costing data.
+- It is replaced atomically, so it is safe to poll. It is rewritten on every
+  reconnect attempt, so put it on a memory-backed filesystem (`/run`, `/tmp`)
+  wherever flash wear matters.
+- It is removed when the agent exits cleanly. A file left behind means the agent
+  did not, so treat it as live status only while the process is running.
+
+It behaves identically on the router (lite) build.
 
 ## Permission policy
 

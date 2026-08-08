@@ -24,6 +24,37 @@ Switching from flash back to RAM deletes the flash copy at the next service star
 
 ## Install
 
+The console's Agent page generates this command for you, with your server address, a fresh enrollment token and the permission policy already filled in — **Agents → Enrollment → OpenWrt**:
+
+```sh
+wget -O /tmp/nettact-openwrt.sh https://d.nettact.org/agent/openwrt.sh && sh /tmp/nettact-openwrt.sh \
+  --server-url 'https://nettact.example.com' \
+  --token '<one-time enrollment token>'
+```
+
+::: tip Why not pipe it straight into `sh`
+A pipeline reports the status of its *last* command, and a shell handed an empty standard input exits successfully — so `wget … | sh` prints nothing and looks like a clean install when the download failed. Downloading first makes it a precondition.
+:::
+
+It installs both packages, writes the settings into `/etc/config/nettact`, starts the service and then waits until the router reports itself connected. If that does not happen within the timeout, the install **fails** and prints the agent's own connection status and recent log rather than reporting a success nobody verified. The service is left enabled either way. Most failures keep retrying on their own — an unreachable server, and also a rejected token, since a site that was at its agent limit can be fixed at the other end and the same token then works. Only two are terminal: no token at all, and a credential the router could not write to disk.
+
+| Option | Meaning |
+| --- | --- |
+| `--token-file <path>` | Read the one-time token from a file instead of the command line. |
+| `--permissions <list>` | Comma-separated permission policy, or `none`. REPLACES the built-in default grant. The console generates a ready-made value. |
+| `--mode ram\|flash` | Where the agent binary lives (default `ram`), as described above. |
+| `--version <tag>` | Pin the agent binary to a release tag instead of `latest`. |
+| `--download-base <url>` | Where the agent **binary** is fetched from; point it at a local mirror. |
+| `--ipk-base <url\|dir>` | Where the two **packages** come from. A local directory works, which is how an unreleased build is tested. |
+| `--tls-insecure` | Accept a server certificate that does not verify. |
+| `--no-luci` | Install the agent package without the LuCI pages. |
+| `--reinstall` | Enroll again with the token given here instead of the credential this router already holds — what the console's **Reinstall** produces. The old credential and queue are discarded, and only after the configuration has been written, so a bad option or a failed UCI write leaves the router exactly as it was. |
+| `--wait <seconds>` | How long to wait for the router to come online (default 180; `0` skips the check). |
+
+Re-running it is safe. The agent's identity in `/etc/nettact/data` is never touched, so an already-enrolled router keeps its credential — and does not even need a token.
+
+### Manual install
+
 ```sh
 opkg update
 opkg install ca-bundle
@@ -35,11 +66,13 @@ opkg install https://d.nettact.org/agent/luci-app-nettact.ipk
 For `opkg` to fetch over HTTPS the image needs `libustream-mbedtls` (or the openssl/wolfssl variant) and `ca-bundle`. Official images include them; if `opkg install` reports an SSL error, install those first.
 :::
 
-After installation the service is **stopped and not enabled** — installing a package should never make a router start reporting to a server nobody has configured yet.
+After installation the service is **stopped and not enabled** — installing a package should never make a router start reporting to a server nobody has configured yet. Configure it as below.
 
 ## Configure
 
 In LuCI, open **Services → NetTact**, fill in the server URL and enrollment token, choose a storage mode, and enable it.
+
+The status page then answers the question a router owner actually has — not "is the process running" but "is it reporting". Under **Server connections** each configured server gets its connection state (with a live countdown to the next attempt when it is retrying), the reason it is not connected in plain words, how many entries are waiting to upload, and when it was last connected.
 
 Or edit `/etc/config/nettact` directly:
 
@@ -119,7 +152,7 @@ A per-entry `permission_mode` replaces the router-wide grant for that server onl
 
 The init script renders `/etc/config/nettact` into `/var/etc/nettact/agent.yaml` and points the agent at it. That path is on tmpfs, so the enrollment token never comes to rest on flash a second time and changing a setting spends no overlay erase cycles. The file is rewritten from UCI at every service start — editing it directly is pointless.
 
-Only `NETTACT_AGENT_DATA_DIR` still travels as an environment variable, so that a hand-written config which omits `data_dir` still keeps the identity on flash.
+Three settings still travel as environment variables rather than through that file: `NETTACT_AGENT_CONFIG_FILE` (which config to read), `NETTACT_AGENT_DATA_DIR` (so a hand-written config that omits `data_dir` still keeps the identity on flash), and `NETTACT_AGENT_STATUS_FILE` (the tmpfs path the LuCI status page reads). A hand-written config that sets `status_file` itself wins over the last of these — a file value always beats the environment.
 
 If you need something UCI does not model, write `/etc/nettact/agent.yaml` by hand — the whole schema is in the [agent configuration reference](/en/agent-config). When that file exists the init script uses it verbatim and generates nothing, so the two can never disagree about which config is live. The LuCI status page says which one is in effect.
 
@@ -182,6 +215,7 @@ rm -rf /etc/nettact        # also removes the agent's identity
 
 ```sh
 logread -e nettact              # service log
+cat /tmp/nettact/status.json    # per-server connection state, as JSON
 /etc/init.d/nettact status      # is it running
 cat /var/etc/nettact/agent.yaml # the configuration UCI actually produced
 /usr/lib/nettact/fetch.sh arch  # architecture this device resolved to
@@ -192,6 +226,7 @@ Common cases:
 
 - **The service exits immediately after starting.** Check that `enabled` is `1` and a server is configured. Without both, the init script logs why and exits cleanly.
 - **A LuCI change had no effect.** Check the status page's "Configuration" row: if it says hand-written, `/etc/nettact/agent.yaml` exists and is being used instead of these settings. Delete or rename it to go back to UCI.
+- **"Server connections" says no status yet, and stays that way.** The agent writes `/tmp/nettact/status.json` and the page reads it, so the section is empty for a few seconds after every start. If it never fills in, a hand-written `/etc/nettact/agent.yaml` has set its own `status_file:` — a file value beats the environment, so the package's tmpfs path is ignored. Remove that key to get the panel back; the log still has everything either way.
 - **It waits and never starts.** The launcher waits up to five minutes each for a plausible clock and a default route. A router with no RTC boots in 1970, which makes every server certificate "not yet valid" — confirm `sysntpd` is running.
 - **The download fails.** Confirm `ca-bundle` is installed and `download_base` is reachable; try it by hand with `uclient-fetch -O- <url>`.
 - **"no NetTact agent build for architecture".** Include the output of `opkg print-architecture` in the issue.

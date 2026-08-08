@@ -269,7 +269,9 @@ Agent 装在**每一台你想监控的机器**上:Server 这台、另一台服�
 1. 那台机器能访问 Server(`http(s)://<server 主机>:<NETTACT_HTTP_PORT>`);
 2. 在控制台「Agent」页为它签发一枚一次性注册令牌(**每台 Agent 一枚**)。
 
-一个安装脚本覆盖三种装法(Linux / macOS 原生 + Docker):
+一个安装脚本覆盖三种装法(Linux / macOS 原生 + Docker)。**路由器**用的是另一个脚本
+——见 [OpenWrt 路由器安装](./openwrt.md),那边的 agent 以两个 opkg 软件包的形式安装,
+首次启动时再下载对应架构的二进制,另有一个 LuCI 页面用于配置。
 
 原生 Linux 或 macOS(systemd / launchd 服务,需要 root):
 
@@ -432,7 +434,33 @@ compose 读 `.env` 只是为了展开 compose 文件里的 `${...}`,而生成的
 > Agent 会拿着早已用掉的令牌,向每一台 Server 重新注册。从此以后请改这几个文件再
 > `docker compose up -d`,生成文件开头的注释说的就是这件事。
 
+### 确认 Agent 真的连上了
+
+连不上 Server 的 Agent 照样在跑、照样在重试,所以服务处于 "active" 并不能证明真的
+有数据在上报。每次尝试,Agent 都会把结果说出来:
+
+```
+[default] connected to https://nettact.example.com (agent 3f2a9c1e)
+[default] session ended (tls_cert_expired): dial: … x509: certificate has expired …; reconnecting in 32.1s (pending 247)
+```
+
+去哪里看,取决于你是怎么装的:
+
+```bash
+journalctl -u nettact-agent -f                        # Linux 原生安装
+tail -f /var/log/nettact-agent.log                    # macOS 原生安装
+cd ~/nettact-agent && docker compose logs -f          # Docker
+```
+
+括号里的词是一个稳定的原因代码——`tls_cert_expired`、`dns`、`refused`、`auth`
+等十几个,连同各自的常见修法,都列在[查看连接状态](./agent-config.md#查看连接状态)。
+
+Windows 计划任务安装会丢弃输出,没有日志可跟。请改用
+[`status_file`](./agent-config.md#状态文件),读它写出的 JSON;凡是需要机器自己汇报
+状态、而不会有人盯着日志的场景,用的都是这个选项。
+
 ---
+
 
 ## 10. 宿主机视角与容器视角(Docker 安装)
 

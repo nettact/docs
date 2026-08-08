@@ -24,6 +24,37 @@
 
 ## 安装
 
+控制台的 Agent 页面会替你生成好这条命令,服务器地址、新的注册令牌和权限策略都已经填好——**Agent → 接入管理 → OpenWrt**:
+
+```sh
+wget -O /tmp/nettact-openwrt.sh https://d.nettact.org/agent/openwrt.sh && sh /tmp/nettact-openwrt.sh \
+  --server-url 'https://nettact.example.com' \
+  --token '<一次性注册令牌>'
+```
+
+::: tip 为什么不直接管道给 `sh`
+管道的退出码取的是*最后一个*命令的,而 shell 读到空的标准输入会正常退出——所以 `wget … | sh` 在下载失败时什么都不打印,看起来和装好了一模一样。先下载再执行,下载就成了前置条件。
+:::
+
+它会装好两个软件包,把设置写入 `/etc/config/nettact`,启动服务,然后一直等到路由器报告自己已连接为止。若在超时内没等到,安装会**失败**并打印 agent 自己的连接状态和近期日志,而不是报一个没人验证过的成功。无论哪种情况服务都保持启用。大多数失败会自行重试——服务器不可达是一种,令牌被拒也是:站点 Agent 数超限这类原因在另一端修好后,同一枚令牌就能通过。真正的终止状态只有两个:根本没有令牌,以及凭据没能写进磁盘。
+
+| 选项 | 说明 |
+| --- | --- |
+| `--token-file <路径>` | 从文件读取一次性令牌,而不是写在命令行里。 |
+| `--permissions <列表>` | 逗号分隔的权限策略,或 `none`。它**替换**内置默认授权而非叠加。控制台会生成现成的值。 |
+| `--mode ram\|flash` | agent 二进制的存放位置(默认 `ram`),含义见上文。 |
+| `--version <tag>` | 把二进制固定到某个发布标签,而不是 `latest`。 |
+| `--download-base <url>` | **二进制**的下载源,可指向本地镜像。 |
+| `--ipk-base <url\|目录>` | 两个**软件包**的来源。可以是本地目录——测试未发布的构建就靠它。 |
+| `--tls-insecure` | 接受无法验证的服务器证书。 |
+| `--no-luci` | 只装 agent 包,不装 LuCI 页面。 |
+| `--reinstall` | 用这里给的令牌重新注册,而不是继续用路由器已有的凭据——控制台的**重装**生成的就是它。旧凭据和队列会被丢弃,且只在配置写完之后才丢——所以参数写错或 uci 写入失败时,路由器还是原样。 |
+| `--wait <秒>` | 等待路由器上线的时长(默认 180;填 `0` 跳过检查)。 |
+
+重复执行是安全的。`/etc/nettact/data` 里的身份始终不动,所以已经注册过的路由器会保留原有凭据——甚至不需要再给令牌。
+
+### 手动安装
+
 ```sh
 opkg update
 opkg install ca-bundle
@@ -35,11 +66,13 @@ opkg install https://d.nettact.org/agent/luci-app-nettact.ipk
 `opkg` 通过 HTTPS 下载需要镜像库里有 `libustream-mbedtls`(或 openssl / wolfssl 版本)和 `ca-bundle`。官方固件默认已经包含;若 `opkg install` 报 SSL 错误,先装上它们。
 :::
 
-装完后服务处于**停止且未启用**状态——安装一个包不应该让路由器立刻开始向某个还没填的服务器上报。
+装完后服务处于**停止且未启用**状态——安装一个包不应该让路由器立刻开始向某个还没填的服务器上报。按下一节配置即可。
 
 ## 配置
 
 在 LuCI 里打开 **服务 → NetTact**,填写服务器地址和注册令牌,选择存放模式,然后启用。
+
+状态页回答的是路由器主人真正关心的那个问题——不是「进程在不在跑」,而是「到底有没有在上报」。在**服务器连接**一栏下,每台已配置的 Server 都会列出连接状态(正在重试时带一个实时倒计时)、没连上的原因(大白话)、还有多少条待上传,以及上次连接是什么时候。
 
 或者直接改 `/etc/config/nettact`:
 
@@ -119,7 +152,7 @@ uci commit nettact
 
 init 脚本会把 `/etc/config/nettact` 渲染成 `/var/etc/nettact/agent.yaml`,再让 Agent 读它。该路径在 tmpfs 上,因此注册令牌不会在闪存上留第二份,改设置也不会消耗 overlay 的擦写寿命。这个文件每次启动服务都会从 UCI 重新生成,直接编辑它没有意义。
 
-只有 `NETTACT_AGENT_DATA_DIR` 仍以环境变量传入,这样即使手写配置里没写 `data_dir`,身份信息也仍然落在闪存的正确位置。
+有三项仍以环境变量传入而不走这份文件:`NETTACT_AGENT_CONFIG_FILE`(读哪份配置)、`NETTACT_AGENT_DATA_DIR`(这样即使手写配置里没写 `data_dir`,身份信息也仍然落在闪存)和 `NETTACT_AGENT_STATUS_FILE`(LuCI 状态页读的那个 tmpfs 路径)。手写配置里自己写了 `status_file` 则盖过最后这项——文件值总是赢过环境变量。
 
 如果你需要 UCI 没有覆盖的设置,手写一个 `/etc/nettact/agent.yaml` 即可,完整 schema 见 [Agent 配置](/zh/agent-config)。该文件存在时,init 脚本会原样使用它并且不再生成任何东西,因此两者不可能对「哪份配置生效」产生分歧。LuCI 状态页会显示当前用的是哪一份。
 
@@ -182,6 +215,7 @@ rm -rf /etc/nettact        # 连同身份信息一起删除
 
 ```sh
 logread -e nettact              # 服务日志
+cat /tmp/nettact/status.json    # 各 Server 的连接状态(JSON)
 /etc/init.d/nettact status      # 是否在运行
 cat /var/etc/nettact/agent.yaml # UCI 实际渲染出来的配置
 /usr/lib/nettact/fetch.sh arch  # 本机识别出的架构
@@ -192,6 +226,7 @@ ls -l /etc/nettact/data/        # 有 agent.json 即表示注册成功
 
 - **服务启动后立刻退出。** 检查 `enabled=1` 且已配置服务器。两者缺一,init 脚本会记一条日志然后正常退出。
 - **在 LuCI 里改了没生效。** 看状态页的「配置来源」一行:如果显示「手写配置」,说明 `/etc/nettact/agent.yaml` 存在并被优先使用了。删除或改名该文件即可回到 UCI。
+- **「服务器连接」一直显示暂无状态。** Agent 写 `/tmp/nettact/status.json`,状态页读它,所以每次启动后有几秒钟是空的。如果一直不出来,多半是手写的 `/etc/nettact/agent.yaml` 自己设了 `status_file:`——文件值优先于环境变量,安装包给的 tmpfs 路径被覆盖了。删掉那个键即可恢复面板;无论如何,日志里该有的都有。
 - **一直卡在等待。** 启动脚本会等系统时间和默认路由就绪各最多 5 分钟。没有 RTC 的路由器开机时间停在 1970 年,会让所有 TLS 证书都「尚未生效」;确认 `sysntpd` 在跑。
 - **下载失败。** 确认装了 `ca-bundle`,并且 `download_base` 可达。用 `uclient-fetch -O- <url>` 手动试一下。
 - **提示架构不支持。** 把 `opkg print-architecture` 的输出附在 issue 里。
