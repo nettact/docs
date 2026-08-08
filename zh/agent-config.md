@@ -58,6 +58,8 @@ YAML 键与环境变量一一对应,取值、默认与范围完全相同。
 | `server_url` | `NETTACT_AGENT_SERVER_URL` | —(**必填**) | Server 基址,`http(s)://主机:端口`,如 `http://host:12450`。改用 [`servers:`](#同时向多台-server-上报) 列表时不需要它。 |
 | `data_dir` | `NETTACT_AGENT_DATA_DIR` | `./agent-data` | Agent 状态目录:身份密钥 `agent.key`、注册凭据 `agent.json`(每台 Server 一份)、发送缓冲目录 `wal/`。备份/迁移 Agent 就是备份这个目录。 |
 | `status_file` | `NETTACT_AGENT_STATUS_FILE` | 空(关闭) | 在该路径写一个 JSON 连接状态文件——按 Server 分别记录:连没连上、为什么没连上、下次何时重试、积压多少条。见[查看连接状态](#查看连接状态)。 |
+| `persist` | `NETTACT_AGENT_PERSIST` | `true` | 仅路由器(`lite`)构建生效:断连后把未上报的积压写入闪存,路由器重启后不丢。新遥测只在与某台 Server 断开后才写盘——连接健康的稳态下缓冲只在内存里。(重连后消化落盘积压时会为记账再碰几次闪存,消化完段文件即删除。)桌面/服务器构建的缓冲本就始终落盘,忽略此项。 |
+| `persist_window` | `NETTACT_AGENT_PERSIST_WINDOW` | `30m` | 仅路由器构建生效:断连后持续写盘的时长,范围 `[1m, 24h]`。窗口覆盖故障起点——正是以往"重启路由器"会抹掉的那段。窗口按进程计:进程退出时无论窗口是否已过都会把离线积压落盘一次;断连中途重启则开始一个新窗口。 |
 | `tls_insecure` | `NETTACT_AGENT_TLS_INSECURE` | `false` | 跳过 TLS 证书校验——仅限局域网自签名 Server。 |
 | `upload_interval` | `NETTACT_AGENT_UPLOAD_INTERVAL` | `30s` | 上传节奏:缓冲的遥测多久批量上传一次。调小会让面板更新更及时,代价是 Server 侧磁盘写入大致线性增加。 |
 | `wire_format` | `NETTACT_AGENT_WIRE_FORMAT` | `protobuf` | 遥测线格式:`protobuf` 或 `json`。 |

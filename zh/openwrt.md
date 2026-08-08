@@ -101,6 +101,8 @@ uci commit nettact
 | `tls_insecure` | `0` | 接受无法验证的服务器证书。仅用于自建 CA 或你自己控制的 IP 地址服务器。 |
 | `upload_interval` | `30s` | 遥测上报间隔。 |
 | `wire_format` | `protobuf` | `protobuf` 或 `json`。 |
+| `persist_enable` | `1` | 断连期间把未上报积压写入闪存,路由器重启后不丢;只在与 Server 断开时才写。设为 `0` 退回纯内存缓冲。见[路由器版本的功能差异](#路由器版本的功能差异)。 |
+| `persist_window` | `30m` | 断连后持续写盘的时长,范围 `[1m, 24h]`。 |
 | `permission_mode` | `default` | `default`(Agent 内置授权,`recommended` 是它的别名)、`host_metrics`、`full`、`none` 或 `custom`,见下文。填了无法识别的值会直接拒绝启动,而不是回落到默认。 |
 | `permissions` | — | 权限 id 列表,在 `permission_mode` 为 `custom` 时生效。它**整体替换**默认集而不是在其上增删;缺少父权限会直接导致启动失败。 |
 | `probe_access_mode` | 未设置 | `allowlist` 或 `denylist`。未设置即保持默认:允许 `scope:lan` 与 `scope:public`,拒绝 `scope:loopback`、`scope:link-local` 与 `scope:metadata`。 |
@@ -180,10 +182,10 @@ MIPS 只提供软浮点版本:MT7621 一系没有 FPU,而软浮点版本在少�
 
 ## 路由器版本的功能差异
 
-路由器上的构建(资产名带 `-lite-`)去掉了两样东西:
+路由器上的构建(资产名带 `-lite-`)有两处不同:
 
 - **不支持 WireGuard 出口探测。** 用户态 WireGuard 加上它依赖的 gVisor 网络栈是二进制里最大的一块。如果某个监控项指定了走 WireGuard 代理,该监控项会明确报配置错误,**不会**退回直连——否则测出来的就是另一条路径的数据。SOCKS5 和 HTTP CONNECT 代理仍然可用。
-- **遥测缓冲只在内存里。** 桌面/服务器版本在上报中断时会把缓冲写到磁盘;路由器版不会,因为那意味着拿闪存的擦写寿命去存一批本来就要立刻上传的数据。代价是断电或崩溃会丢掉尚未上报的缓冲(有上限)。身份信息不受影响,始终在闪存上。
+- **遥测缓冲只在断连期间碰闪存。** 桌面/服务器版本无条件把缓冲落盘;路由器版在连接正常时缓冲只在内存里——不拿闪存的擦写寿命去存一批本来就要立刻上传的数据。与 Server 断开后,积压会在断连后的前 30 分钟内写入闪存(UCI `persist_window`;断连中途重启视为一次新的断连),所以断网时习惯性地重启路由器,不会再抹掉恰好能说明故障如何开始的那段数据。连接正常时崩溃仍会丢掉当时缓冲中的内容。设置 `option persist_enable '0'` 可退回纯内存模式。身份信息不受影响,始终在闪存上。
 
 其余探测能力(ICMP、DNS、HTTP、TCP、NAT 行为、traceroute、接口与无线状态)完全一致。
 

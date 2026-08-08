@@ -101,6 +101,8 @@ uci commit nettact
 | `tls_insecure` | `0` | Accept a server certificate that does not verify. Only for a private CA or an IP-address server you control. |
 | `upload_interval` | `30s` | How often buffered telemetry is uploaded. |
 | `wire_format` | `protobuf` | `protobuf` or `json`. |
+| `persist_enable` | `1` | Keep an unsent backlog on flash across a reboot; written only while a server connection is down. Set `0` for a memory-only buffer. See [what the router build leaves out](#what-the-router-build-leaves-out). |
+| `persist_window` | `30m` | How long after a disconnect the backlog keeps being written to flash, `[1m, 24h]`. |
 | `permission_mode` | `default` | `default` (the agent's built-in grant; `recommended` is an alias), `host_metrics`, `full`, `none`, or `custom` — see below. An unrecognised value stops the service rather than falling back to the default. |
 | `permissions` | — | List of permission ids, used when `permission_mode` is `custom`. It **replaces** the default grant rather than adding to it, and a permission whose parent is missing is a startup error. |
 | `probe_access_mode` | unset | `allowlist` or `denylist`. Unset keeps the default: `scope:lan` and `scope:public` allowed, `scope:loopback`, `scope:link-local` and `scope:metadata` denied. |
@@ -180,10 +182,10 @@ If a new ARM model falls back to ARMv7 and does not run, send us the output of `
 
 ## What the router build leaves out
 
-Router builds (their asset names contain `-lite-`) drop two things:
+Router builds (their asset names contain `-lite-`) differ in two ways:
 
 - **No WireGuard egress for probes.** Userspace WireGuard and the gVisor network stack it dials through are the single largest part of the binary. A monitor pinned to a WireGuard proxy reports a configuration error and does **not** fall back to a direct dial — that would silently measure a different path. SOCKS5 and HTTP CONNECT proxies still work.
-- **The telemetry buffer is memory-only.** The desktop and server builds spill their buffer to disk when uploads stop; the router build does not, because that means spending flash erase cycles on data whose whole purpose is to be uploaded immediately. The cost is that a crash or power cut loses whatever is still buffered, up to a bounded amount. Identity is unaffected — it is always on flash.
+- **The telemetry buffer touches flash only during an outage.** The desktop and server builds spill their buffer to disk unconditionally; the router build keeps it in memory while the connection is healthy — flash erase cycles are not spent on data whose whole purpose is to be uploaded immediately. When a server connection drops, the backlog is written to flash for the first 30 minutes after the disconnect (UCI `persist_window`; a restart mid-outage counts as a fresh disconnect), so rebooting the router mid-outage — the usual reflex — no longer erases the data that shows how the fault began. A crash while connected still loses whatever was buffered at that moment. Set `option persist_enable '0'` to return to memory-only. Identity is unaffected — it is always on flash.
 
 Everything else is identical: ICMP, DNS, HTTP, TCP, NAT behaviour, traceroute, interface and Wi-Fi state.
 
